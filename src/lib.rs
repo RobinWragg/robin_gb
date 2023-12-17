@@ -43,13 +43,17 @@ impl Lcd {
 
 use std::fs;
 
-struct Joypad {}
+struct Joypad {
+    action_buttons: u8,
+    direction_buttons: u8,
+}
 impl Joypad {
     fn new() -> Self {
-        Self {}
+        Self {
+            action_buttons: 0xff,
+            direction_buttons: 0xff,
+        }
     }
-
-    fn set_button(&mut self, button: &Button, is_down: bool) {}
 }
 
 const MEMORY_ADDRESS_SPACE_SIZE: usize = 1024 * 64;
@@ -89,15 +93,6 @@ impl Cpu {
     }
 }
 
-pub struct GameBoy {
-    joypad: Joypad,
-    lcd: Lcd,
-    memory: Memory,
-    cpu: Cpu,
-    registers: Registers,
-    timer: Timer,
-}
-
 pub enum Button {
     A,
     B,
@@ -115,6 +110,15 @@ const INTERRUPT_FLAG_JOYPAD: u8 = 0x10;
 const INTERRUPT_FLAGS_ADDRESS: usize = 0xff0f;
 const IE_ADDRESS: usize = 0xffff;
 
+pub struct GameBoy {
+    joypad: Joypad,
+    lcd: Lcd,
+    memory: Memory,
+    cpu: Cpu,
+    registers: Registers,
+    timer: Timer,
+}
+
 impl GameBoy {
     pub fn emulate_next_frame(&mut self) -> [u8; Lcd::PIXEL_COUNT] {
         // rwtodo run cpu etc
@@ -125,7 +129,27 @@ impl GameBoy {
 
     // Inform the emulator of button state with this function. All buttons are up (unpressed) when emulation starts.
     pub fn set_button(&mut self, button: &Button, is_down: bool) {
-        self.joypad.set_button(button, is_down);
+        // rwtodo
+    }
+
+    fn respond_to_joypad_register_write(&mut self, mut register_value: u8) -> u8 {
+        const ACTION_BUTTON_REQUEST: u8 = 0x20;
+        const DIRECTION_BUTTON_REQUEST: u8 = 0x10;
+
+        register_value |= 0xc0; // bits 6 and 7 are always 1.
+        register_value |= 0x0f; // unpressed buttons are 1.
+
+        if (register_value & ACTION_BUTTON_REQUEST) == 0x00 {
+            register_value &= self.joypad.action_buttons;
+            self.request_interrupt(INTERRUPT_FLAG_JOYPAD);
+        }
+
+        if (register_value & DIRECTION_BUTTON_REQUEST) == 0x00 {
+            register_value &= self.joypad.direction_buttons;
+            self.request_interrupt(INTERRUPT_FLAG_JOYPAD);
+        }
+
+        return register_value;
     }
 
     fn request_interrupt(&mut self, interrupt_flag: u8) {
@@ -133,6 +157,55 @@ impl GameBoy {
         self.memory[INTERRUPT_FLAGS_ADDRESS] |= interrupt_flag;
         // Top 3 bits are always 1
         self.memory[INTERRUPT_FLAGS_ADDRESS] |= 0xe0;
+    }
+
+    fn memory_write(&mut self, address: usize, value: u8) {
+        // rwtodo: convert to match statement?
+        if (address < 0x8000) {
+            // perform_cart_control(address, value); rwtodo
+        } else if address == 0xff00 {
+            // rwtodo: label as a constant?
+            self.memory[address] = self.respond_to_joypad_register_write(value);
+        } else if address == 0xff04 {
+            // rwtodo: label as a constant?
+            self.memory[address] = self.timer.respond_to_div_register();
+        } else if address == 0xff46 {
+            // Perform OAM DMA transfer. rwtodo: copying twice here, unless the compiler optimizes it out. Use copy_within on self.memory directly.
+            const SIZE_OF_TRANSFER: usize = 160;
+
+            let mut bytes_to_transfer: [u8; SIZE_OF_TRANSFER] = [0; SIZE_OF_TRANSFER];
+
+            {
+                let src_range_start: usize = (value as usize) * 0x100;
+                let src_range_end: usize = src_range_start + SIZE_OF_TRANSFER;
+                let src_slice = &self.memory[src_range_start..src_range_end];
+                bytes_to_transfer.copy_from_slice(src_slice);
+            }
+
+            let dst_range_start: usize = 0xfe00;
+            let dst_range_end: usize = dst_range_start + SIZE_OF_TRANSFER;
+            let dst_slice = &mut self.memory[dst_range_start..dst_range_end];
+
+            dst_slice.copy_from_slice(&bytes_to_transfer);
+        } else {
+            self.memory[address] = value;
+
+            // Memory is duplicated when writing to these registers
+            if address >= 0xc000 && address < 0xde00 {
+                let echo_address = address - 0xc000 + 0xe000;
+                self.memory[echo_address] = value;
+            } else if address >= 0xe000 && address < 0xfe00 {
+                let echo_address = address - 0xe000 + 0xc000;
+                self.memory[echo_address] = value;
+            }
+
+            // rwtodo: implement cart_state stuff so we can do this.
+            // rwtodo: Also handle the below for MBC3.
+            // if cart_state.mbc_type == MBC_1 && address >= 0xa000 && address < 0xc000 {
+            //     // RAM was written to.
+            //     cart_state.save_file_is_outdated = true;
+            // }
+        }
     }
 }
 
