@@ -24,17 +24,16 @@ impl Timer {
     }
 }
 
-const MEMORY_ADDRESS_SPACE_SIZE: usize = 1024 * 64;
-
 struct Memory {
-    bytes: [u8; MEMORY_ADDRESS_SPACE_SIZE],
+    bytes: [u8; Self::ADDRESS_SPACE_SIZE],
     joypad: Joypad,
 }
 
 impl Memory {
+    const ADDRESS_SPACE_SIZE: usize = 1024 * 64;
     fn new() -> Self {
         Self {
-            bytes: [0; MEMORY_ADDRESS_SPACE_SIZE],
+            bytes: [0; Self::ADDRESS_SPACE_SIZE],
             joypad: Joypad::new(),
         }
     }
@@ -63,7 +62,7 @@ impl Memory {
         return register_value;
     }
 
-    fn memory_write(&mut self, address: u16, value: u8) {
+    fn write(&mut self, address: u16, value: u8) {
         // rwtodo: convert to match statement?
         if (address < 0x8000) {
             // perform_cart_control(address, value); rwtodo
@@ -112,7 +111,7 @@ impl Memory {
         }
     }
 
-    fn memory_read(&self, address: u16) -> u8 {
+    fn read(&self, address: u16) -> u8 {
         // rwtodo rom banks
         // if address >= 0x4000 && address < 0x8000 {
         //     return robingb_romb_read_switchable_bank(address);
@@ -121,9 +120,9 @@ impl Memory {
         // }
     }
 
-    fn memory_read_u16(&self, address: u16) -> u16 {
-        let byte_0 = self.memory_read(address) as u16;
-        let byte_1 = self.memory_read(address + 1) as u16;
+    fn read_u16(&self, address: u16) -> u16 {
+        let byte_0 = self.read(address) as u16;
+        let byte_1 = self.read(address + 1) as u16;
         (byte_0 << 8) | byte_1
     }
 
@@ -213,7 +212,7 @@ const INTERRUPT_FLAG_SERIAL: u8 = 0x08;
 const INTERRUPT_FLAG_JOYPAD: u8 = 0x10;
 
 const INTERRUPT_FLAGS_ADDRESS: usize = 0xff0f;
-const IE_ADDRESS: usize = 0xffff; // rwtodo full name
+const INTERRUPT_ENABLE_ADDRESS: usize = 0xffff;
 
 pub struct GameBoy {
     lcd: Lcd,
@@ -239,12 +238,12 @@ impl GameBoy {
     fn stack_push(&mut self, value: u16) {
         let bytes = value.to_le_bytes();
         self.registers.sp -= 2;
-        self.memory.memory_write(self.registers.sp, bytes[0]);
-        self.memory.memory_write(self.registers.sp + 1, bytes[1]);
+        self.memory.write(self.registers.sp, bytes[0]);
+        self.memory.write(self.registers.sp + 1, bytes[1]);
     }
 
     fn stack_pop(&mut self) -> u16 {
-        let value = self.memory.memory_read_u16(self.registers.sp);
+        let value = self.memory.read_u16(self.registers.sp);
         self.registers.sp += 2;
         value
     }
