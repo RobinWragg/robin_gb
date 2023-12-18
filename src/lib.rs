@@ -22,9 +22,117 @@ impl Timer {
     fn new() -> Self {
         Self {}
     }
+}
 
-    fn respond_to_div_register(&mut self) -> u8 {
-        0x00 // rwtodo: Revisit this.
+const MEMORY_ADDRESS_SPACE_SIZE: usize = 1024 * 64;
+
+struct Memory {
+    bytes: [u8; MEMORY_ADDRESS_SPACE_SIZE],
+    joypad: Joypad,
+}
+
+impl Memory {
+    fn new() -> Self {
+        Self {
+            bytes: [0; MEMORY_ADDRESS_SPACE_SIZE],
+            joypad: Joypad::new(),
+        }
+    }
+
+    fn direct_access(&mut self, address: u16) -> &mut u8 {
+        &mut self.bytes[address as usize]
+    }
+
+    fn get_joypad_register_write_result(&mut self, mut register_value: u8) -> u8 {
+        const ACTION_BUTTON_REQUEST: u8 = 0x20;
+        const DIRECTION_BUTTON_REQUEST: u8 = 0x10;
+
+        register_value |= 0xc0; // bits 6 and 7 are always 1.
+        register_value |= 0x0f; // unpressed buttons are 1.
+
+        if (register_value & ACTION_BUTTON_REQUEST) == 0x00 {
+            register_value &= self.joypad.action_buttons;
+            self.request_interrupt(INTERRUPT_FLAG_JOYPAD);
+        }
+
+        if (register_value & DIRECTION_BUTTON_REQUEST) == 0x00 {
+            register_value &= self.joypad.direction_buttons;
+            self.request_interrupt(INTERRUPT_FLAG_JOYPAD);
+        }
+
+        return register_value;
+    }
+
+    fn memory_write(&mut self, address: u16, value: u8) {
+        // rwtodo: convert to match statement?
+        if (address < 0x8000) {
+            // perform_cart_control(address, value); rwtodo
+        } else if address == 0xff00 {
+            // rwtodo: label 0xff00 as a constant?
+            self.bytes[address as usize] = self.get_joypad_register_write_result(value);
+        } else if address == 0xff04 {
+            // rwtodo: label 0xff04 as a constant?
+            self.bytes[address as usize] = 0x00; // Reset timer DIV register.
+        } else if address == 0xff46 {
+            // Perform OAM DMA transfer. rwtodo: copying twice here, unless the compiler optimizes it out. Use copy_within on self.memory directly.
+            const SIZE_OF_TRANSFER: usize = 160;
+
+            let mut bytes_to_transfer: [u8; SIZE_OF_TRANSFER] = [0; SIZE_OF_TRANSFER];
+
+            {
+                let src_range_start: usize = (value as usize) * 0x100;
+                let src_range_end: usize = src_range_start + SIZE_OF_TRANSFER;
+                let src_slice = &self.bytes[src_range_start..src_range_end];
+                bytes_to_transfer.copy_from_slice(src_slice);
+            }
+
+            let dst_range_start: usize = 0xfe00;
+            let dst_range_end: usize = dst_range_start + SIZE_OF_TRANSFER;
+            let dst_slice = &mut self.bytes[dst_range_start..dst_range_end];
+
+            dst_slice.copy_from_slice(&bytes_to_transfer);
+        } else {
+            self.bytes[address as usize] = value;
+
+            // Memory is duplicated when writing to these registers
+            if address >= 0xc000 && address < 0xde00 {
+                let echo_address = address - 0xc000 + 0xe000;
+                self.bytes[echo_address as usize] = value;
+            } else if address >= 0xe000 && address < 0xfe00 {
+                let echo_address = address - 0xe000 + 0xc000;
+                self.bytes[echo_address as usize] = value;
+            }
+
+            // rwtodo: implement cart_state stuff so we can do this.
+            // rwtodo: Also handle the below for MBC3.
+            // if cart_state.mbc_type == MBC_1 && address >= 0xa000 && address < 0xc000 {
+            //     // RAM was written to.
+            //     cart_state.save_file_is_outdated = true;
+            // }
+        }
+    }
+
+    fn memory_read(&self, address: u16) -> u8 {
+        // rwtodo rom banks
+        // if address >= 0x4000 && address < 0x8000 {
+        //     return robingb_romb_read_switchable_bank(address);
+        // } else {
+        self.bytes[address as usize]
+        // }
+    }
+
+    fn memory_read_u16(&self, address: u16) -> u16 {
+        let byte_0 = self.memory_read(address) as u16;
+        let byte_1 = self.memory_read(address + 1) as u16;
+        (byte_0 << 8) | byte_1
+    }
+
+    fn request_interrupt(&mut self, interrupt_flag: u8) {
+        // Combine with the existing request flags
+        // rwtodo can do this all in one call
+        self.bytes[INTERRUPT_FLAGS_ADDRESS] |= interrupt_flag;
+        // Top 3 bits are always 1
+        self.bytes[INTERRUPT_FLAGS_ADDRESS] |= 0xe0; // rwtodo is there binary syntax for this?
     }
 }
 
@@ -55,9 +163,6 @@ impl Joypad {
         }
     }
 }
-
-const MEMORY_ADDRESS_SPACE_SIZE: usize = 1024 * 64;
-type Memory = [u8; MEMORY_ADDRESS_SPACE_SIZE];
 
 struct Cpu {
     num_cycles_for_finish: u8, // rwtodo: I could perhaps just implement this as return values from all the functions.
@@ -108,10 +213,9 @@ const INTERRUPT_FLAG_SERIAL: u8 = 0x08;
 const INTERRUPT_FLAG_JOYPAD: u8 = 0x10;
 
 const INTERRUPT_FLAGS_ADDRESS: usize = 0xff0f;
-const IE_ADDRESS: usize = 0xffff;
+const IE_ADDRESS: usize = 0xffff; // rwtodo full name
 
 pub struct GameBoy {
-    joypad: Joypad,
     lcd: Lcd,
     memory: Memory,
     cpu: Cpu,
@@ -132,108 +236,17 @@ impl GameBoy {
         // rwtodo
     }
 
-    fn respond_to_joypad_register_write(&mut self, mut register_value: u8) -> u8 {
-        const ACTION_BUTTON_REQUEST: u8 = 0x20;
-        const DIRECTION_BUTTON_REQUEST: u8 = 0x10;
-
-        register_value |= 0xc0; // bits 6 and 7 are always 1.
-        register_value |= 0x0f; // unpressed buttons are 1.
-
-        if (register_value & ACTION_BUTTON_REQUEST) == 0x00 {
-            register_value &= self.joypad.action_buttons;
-            self.request_interrupt(INTERRUPT_FLAG_JOYPAD);
-        }
-
-        if (register_value & DIRECTION_BUTTON_REQUEST) == 0x00 {
-            register_value &= self.joypad.direction_buttons;
-            self.request_interrupt(INTERRUPT_FLAG_JOYPAD);
-        }
-
-        return register_value;
-    }
-
-    fn request_interrupt(&mut self, interrupt_flag: u8) {
-        // Combine with the existing request flags
-        self.memory[INTERRUPT_FLAGS_ADDRESS] |= interrupt_flag;
-        // Top 3 bits are always 1
-        self.memory[INTERRUPT_FLAGS_ADDRESS] |= 0xe0; // rwtodo is there binary syntax for this?
-    }
-
     fn stack_push(&mut self, value: u16) {
         let bytes = value.to_le_bytes();
         self.registers.sp -= 2;
-        self.memory_write(self.registers.sp, bytes[0]);
-        self.memory_write(self.registers.sp + 1, bytes[1]);
+        self.memory.memory_write(self.registers.sp, bytes[0]);
+        self.memory.memory_write(self.registers.sp + 1, bytes[1]);
     }
 
     fn stack_pop(&mut self) -> u16 {
-        let value = self.memory_read_u16(self.registers.sp);
+        let value = self.memory.memory_read_u16(self.registers.sp);
         self.registers.sp += 2;
         value
-    }
-
-    fn memory_write(&mut self, address: u16, value: u8) {
-        // rwtodo: convert to match statement?
-        if (address < 0x8000) {
-            // perform_cart_control(address, value); rwtodo
-        } else if address == 0xff00 {
-            // rwtodo: label 0xff00 as a constant?
-            self.memory[address as usize] = self.respond_to_joypad_register_write(value);
-        } else if address == 0xff04 {
-            // rwtodo: label 0xff04 as a constant?
-            self.memory[address as usize] = self.timer.respond_to_div_register();
-        } else if address == 0xff46 {
-            // Perform OAM DMA transfer. rwtodo: copying twice here, unless the compiler optimizes it out. Use copy_within on self.memory directly.
-            const SIZE_OF_TRANSFER: usize = 160;
-
-            let mut bytes_to_transfer: [u8; SIZE_OF_TRANSFER] = [0; SIZE_OF_TRANSFER];
-
-            {
-                let src_range_start: usize = (value as usize) * 0x100;
-                let src_range_end: usize = src_range_start + SIZE_OF_TRANSFER;
-                let src_slice = &self.memory[src_range_start..src_range_end];
-                bytes_to_transfer.copy_from_slice(src_slice);
-            }
-
-            let dst_range_start: usize = 0xfe00;
-            let dst_range_end: usize = dst_range_start + SIZE_OF_TRANSFER;
-            let dst_slice = &mut self.memory[dst_range_start..dst_range_end];
-
-            dst_slice.copy_from_slice(&bytes_to_transfer);
-        } else {
-            self.memory[address as usize] = value;
-
-            // Memory is duplicated when writing to these registers
-            if address >= 0xc000 && address < 0xde00 {
-                let echo_address = address - 0xc000 + 0xe000;
-                self.memory[echo_address as usize] = value;
-            } else if address >= 0xe000 && address < 0xfe00 {
-                let echo_address = address - 0xe000 + 0xc000;
-                self.memory[echo_address as usize] = value;
-            }
-
-            // rwtodo: implement cart_state stuff so we can do this.
-            // rwtodo: Also handle the below for MBC3.
-            // if cart_state.mbc_type == MBC_1 && address >= 0xa000 && address < 0xc000 {
-            //     // RAM was written to.
-            //     cart_state.save_file_is_outdated = true;
-            // }
-        }
-    }
-
-    fn memory_read(&self, address: u16) -> u8 {
-        // rwtodo rom banks
-        // if address >= 0x4000 && address < 0x8000 {
-        //     return robingb_romb_read_switchable_bank(address);
-        // } else {
-        self.memory[address as usize]
-        // }
-    }
-
-    fn memory_read_u16(&self, address: u16) -> u16 {
-        let byte_0 = self.memory_read(address) as u16;
-        let byte_1 = self.memory_read(address + 1) as u16;
-        (byte_0 << 8) | byte_1
     }
 }
 
@@ -242,8 +255,7 @@ pub fn load_rom(rom_path: &str) -> Result<GameBoy, std::io::Error> {
     let rom_data = fs::read(&rom_path)?; // rwtodo
     Ok(GameBoy {
         lcd: Lcd::new(),
-        joypad: Joypad::new(),
-        memory: [0; MEMORY_ADDRESS_SPACE_SIZE],
+        memory: Memory::new(),
         cpu: Cpu::new(),
         registers: Registers::new(),
         timer: Timer::new(),
