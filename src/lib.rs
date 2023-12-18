@@ -1,7 +1,7 @@
 struct Registers {
-    sp: u16,
-    pc: u16,
-    ime: bool,
+    sp: u16,   // rwtodo more descriptive names than the z80 shorthand
+    pc: u16,   // rwtodo more descriptive names than the z80 shorthand
+    ime: bool, // rwtodo more descriptive names than the z80 shorthand
 }
 impl Registers {
     fn new() -> Self {
@@ -156,19 +156,32 @@ impl GameBoy {
         // Combine with the existing request flags
         self.memory[INTERRUPT_FLAGS_ADDRESS] |= interrupt_flag;
         // Top 3 bits are always 1
-        self.memory[INTERRUPT_FLAGS_ADDRESS] |= 0xe0;
+        self.memory[INTERRUPT_FLAGS_ADDRESS] |= 0xe0; // rwtodo is there binary syntax for this?
     }
 
-    fn memory_write(&mut self, address: usize, value: u8) {
+    fn stack_push(&mut self, value: u16) {
+        let bytes = value.to_le_bytes();
+        self.registers.sp -= 2;
+        self.memory_write(self.registers.sp, bytes[0]);
+        self.memory_write(self.registers.sp + 1, bytes[1]);
+    }
+
+    fn stack_pop(&mut self) -> u16 {
+        let value = self.memory_read_u16(self.registers.sp);
+        self.registers.sp += 2;
+        value
+    }
+
+    fn memory_write(&mut self, address: u16, value: u8) {
         // rwtodo: convert to match statement?
         if (address < 0x8000) {
             // perform_cart_control(address, value); rwtodo
         } else if address == 0xff00 {
-            // rwtodo: label as a constant?
-            self.memory[address] = self.respond_to_joypad_register_write(value);
+            // rwtodo: label 0xff00 as a constant?
+            self.memory[address as usize] = self.respond_to_joypad_register_write(value);
         } else if address == 0xff04 {
-            // rwtodo: label as a constant?
-            self.memory[address] = self.timer.respond_to_div_register();
+            // rwtodo: label 0xff04 as a constant?
+            self.memory[address as usize] = self.timer.respond_to_div_register();
         } else if address == 0xff46 {
             // Perform OAM DMA transfer. rwtodo: copying twice here, unless the compiler optimizes it out. Use copy_within on self.memory directly.
             const SIZE_OF_TRANSFER: usize = 160;
@@ -188,15 +201,15 @@ impl GameBoy {
 
             dst_slice.copy_from_slice(&bytes_to_transfer);
         } else {
-            self.memory[address] = value;
+            self.memory[address as usize] = value;
 
             // Memory is duplicated when writing to these registers
             if address >= 0xc000 && address < 0xde00 {
                 let echo_address = address - 0xc000 + 0xe000;
-                self.memory[echo_address] = value;
+                self.memory[echo_address as usize] = value;
             } else if address >= 0xe000 && address < 0xfe00 {
                 let echo_address = address - 0xe000 + 0xc000;
-                self.memory[echo_address] = value;
+                self.memory[echo_address as usize] = value;
             }
 
             // rwtodo: implement cart_state stuff so we can do this.
@@ -206,6 +219,21 @@ impl GameBoy {
             //     cart_state.save_file_is_outdated = true;
             // }
         }
+    }
+
+    fn memory_read(&self, address: u16) -> u8 {
+        // rwtodo rom banks
+        // if address >= 0x4000 && address < 0x8000 {
+        //     return robingb_romb_read_switchable_bank(address);
+        // } else {
+        self.memory[address as usize]
+        // }
+    }
+
+    fn memory_read_u16(&self, address: u16) -> u16 {
+        let byte_0 = self.memory_read(address) as u16;
+        let byte_1 = self.memory_read(address + 1) as u16;
+        (byte_0 << 8) | byte_1
     }
 }
 
