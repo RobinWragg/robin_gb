@@ -247,6 +247,12 @@ impl GameBoy {
         self.registers.sp += 2;
         value
     }
+
+    fn instruction_RST(&mut self, address_lower_byte: u8) {
+        self.stack_push(self.registers.pc + 1);
+        self.registers.pc = address_lower_byte as u16;
+        self.cpu.finish_instruction(&mut self.registers, 0, 16);
+    }
 }
 
 pub fn load_rom(rom_path: &str) -> Result<GameBoy, std::io::Error> {
