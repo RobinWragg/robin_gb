@@ -1,3 +1,5 @@
+use std::{cell::RefCell, rc::Rc};
+
 struct Registers {
     sp: u16,   // rwtodo more descriptive names than the z80 shorthand
     pc: u16,   // rwtodo more descriptive names than the z80 shorthand
@@ -26,7 +28,7 @@ impl Timer {
 
 struct Memory {
     bytes: [u8; Self::ADDRESS_SPACE_SIZE],
-    joypad: Joypad,
+    joypad: Joypad, // rwtodo: move back to GameBoy struct.
 }
 
 impl Memory {
@@ -71,7 +73,7 @@ impl Memory {
             self.bytes[address as usize] = self.get_joypad_register_write_result(value);
         } else if address == 0xff04 {
             // rwtodo: label 0xff04 as a constant?
-            self.bytes[address as usize] = 0x00; // Reset timer DIV register.
+            self.bytes[address as usize] = 0x00; // Reset timer DIV register. rwtodo: move this responibility into Timer struct
         } else if address == 0xff46 {
             // Perform OAM DMA transfer. rwtodo: copying twice here, unless the compiler optimizes it out. Use copy_within on self.memory directly.
             const SIZE_OF_TRANSFER: usize = 160;
@@ -173,7 +175,7 @@ impl Cpu {
         }
     }
 
-    fn execute_next_instruction(&mut self, registers: &mut Registers, memory: &mut Memory)
+    fn execute_next_instruction(&mut self, registers: &mut Registers)
     /*rwtodo do I need to return anything here? Handle lcd completion state elsewhere? */
     {
     }
@@ -216,7 +218,7 @@ const INTERRUPT_ENABLE_ADDRESS: usize = 0xffff;
 
 pub struct GameBoy {
     lcd: Lcd,
-    memory: Memory,
+    memory: Rc<RefCell<Memory>>,
     cpu: Cpu,
     registers: Registers,
     timer: Timer,
@@ -225,8 +227,7 @@ pub struct GameBoy {
 impl GameBoy {
     pub fn emulate_next_frame(&mut self) -> [u8; Lcd::PIXEL_COUNT] {
         // rwtodo run cpu etc
-        self.cpu
-            .execute_next_instruction(&mut self.registers, &mut self.memory);
+        self.cpu.execute_next_instruction(&mut self.registers);
         self.lcd.pixel_data()
     }
 
@@ -238,12 +239,14 @@ impl GameBoy {
     fn stack_push(&mut self, value: u16) {
         let bytes = value.to_le_bytes();
         self.registers.sp -= 2;
-        self.memory.write(self.registers.sp, bytes[0]);
-        self.memory.write(self.registers.sp + 1, bytes[1]);
+
+        let mut m = self.memory.borrow_mut();
+        m.write(self.registers.sp, bytes[0]);
+        m.write(self.registers.sp + 1, bytes[1]);
     }
 
     fn stack_pop(&mut self) -> u16 {
-        let value = self.memory.read_u16(self.registers.sp);
+        let value = self.memory.borrow().read_u16(self.registers.sp);
         self.registers.sp += 2;
         value
     }
@@ -258,9 +261,12 @@ impl GameBoy {
 pub fn load_rom(rom_path: &str) -> Result<GameBoy, std::io::Error> {
     // rwtodo use a file-like object instead of &str?
     let rom_data = fs::read(&rom_path)?; // rwtodo
+
+    let memory = Rc::new(RefCell::new(Memory::new()));
+
     Ok(GameBoy {
         lcd: Lcd::new(),
-        memory: Memory::new(),
+        memory,
         cpu: Cpu::new(),
         registers: Registers::new(),
         timer: Timer::new(),
