@@ -1,11 +1,11 @@
 use std::{cell::RefCell, rc::Rc};
 
-struct Registers {
+struct CpuRegisters {
     sp: u16,   // rwtodo more descriptive names than the z80 shorthand
     pc: u16,   // rwtodo more descriptive names than the z80 shorthand
     ime: bool, // rwtodo more descriptive names than the z80 shorthand
 }
-impl Registers {
+impl CpuRegisters {
     fn new() -> Self {
         Self {
             // registers.af = 0x01b0; /* NOTE: This is different for Game Boy Pocket, Color etc. */
@@ -166,18 +166,34 @@ impl Joypad {
 }
 
 struct Cpu {
+    registers: CpuRegisters, // rwtodo maybe just put the registers in the cpu without wrapping them in a struct
     num_cycles_for_finish: u8, // rwtodo: I could perhaps just implement this as return values from all the functions.
 }
 impl Cpu {
     fn new() -> Self {
         Self {
+            registers: CpuRegisters::new(),
             num_cycles_for_finish: 0,
         }
     }
 
-    fn execute_next_instruction(&mut self, registers: &mut Registers)
+    fn execute_next_instruction(&mut self)
     /*rwtodo do I need to return anything here? Handle lcd completion state elsewhere? */
     {
+    }
+
+    fn stack_push(&mut self, value_to_push: u16, memory: &mut Memory) {
+        let bytes = value_to_push.to_le_bytes();
+        self.registers.sp -= 2;
+
+        memory.write(self.registers.sp, bytes[0]);
+        memory.write(self.registers.sp + 1, bytes[1]);
+    }
+
+    fn stack_pop(&mut self, memory: &Memory) -> u16 {
+        let popped_value = memory.read_u16(self.registers.sp);
+        self.registers.sp += 2;
+        popped_value
     }
 
     fn subtraction_produces_u8_full_carry(a: i16, b: i16) -> bool {
@@ -188,14 +204,20 @@ impl Cpu {
         a + b > 0xff
     }
 
-    fn finish_instruction(
-        &mut self,
-        registers: &mut Registers,
-        pc_increment: i16,
-        num_cycles_param: u8,
-    ) {
-        registers.pc = registers.pc.wrapping_add_signed(pc_increment);
+    fn finish_instruction(&mut self, pc_increment: i16, num_cycles_param: u8) {
+        self.registers.pc = self.registers.pc.wrapping_add_signed(pc_increment);
         self.num_cycles_for_finish = num_cycles_param;
+    }
+
+    fn instruction_RST(&mut self, memory: &mut Memory, address_lower_byte: u8) {
+        self.stack_push(self.registers.pc + 1, memory);
+        self.registers.pc = address_lower_byte as u16;
+        self.finish_instruction(0, 16);
+    }
+
+    fn instruction_SET(&mut self, bit_to_set: u8, register_to_set: &mut u8, num_cycles: u8) {
+        *register_to_set |= 0x01 << bit_to_set;
+        self.finish_instruction(1, num_cycles);
     }
 }
 
@@ -218,16 +240,15 @@ const INTERRUPT_ENABLE_ADDRESS: usize = 0xffff;
 
 pub struct GameBoy {
     lcd: Lcd,
-    memory: Rc<RefCell<Memory>>,
+    memory: Memory,
     cpu: Cpu,
-    registers: Registers,
     timer: Timer,
 }
 
 impl GameBoy {
     pub fn emulate_next_frame(&mut self) -> [u8; Lcd::PIXEL_COUNT] {
         // rwtodo run cpu etc
-        self.cpu.execute_next_instruction(&mut self.registers);
+        self.cpu.execute_next_instruction();
         self.lcd.pixel_data()
     }
 
@@ -235,40 +256,16 @@ impl GameBoy {
     pub fn set_button(&mut self, button: &Button, is_down: bool) {
         // rwtodo
     }
-
-    fn stack_push(&mut self, value: u16) {
-        let bytes = value.to_le_bytes();
-        self.registers.sp -= 2;
-
-        let mut m = self.memory.borrow_mut();
-        m.write(self.registers.sp, bytes[0]);
-        m.write(self.registers.sp + 1, bytes[1]);
-    }
-
-    fn stack_pop(&mut self) -> u16 {
-        let value = self.memory.borrow().read_u16(self.registers.sp);
-        self.registers.sp += 2;
-        value
-    }
-
-    fn instruction_RST(&mut self, address_lower_byte: u8) {
-        self.stack_push(self.registers.pc + 1);
-        self.registers.pc = address_lower_byte as u16;
-        self.cpu.finish_instruction(&mut self.registers, 0, 16);
-    }
 }
 
 pub fn load_rom(rom_path: &str) -> Result<GameBoy, std::io::Error> {
     // rwtodo use a file-like object instead of &str?
     let rom_data = fs::read(&rom_path)?; // rwtodo
 
-    let memory = Rc::new(RefCell::new(Memory::new()));
-
     Ok(GameBoy {
         lcd: Lcd::new(),
-        memory,
+        memory: Memory::new(),
         cpu: Cpu::new(),
-        registers: Registers::new(),
         timer: Timer::new(),
     })
 }
