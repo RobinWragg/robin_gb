@@ -28,15 +28,19 @@ impl Timer {
 
 struct Memory {
     bytes: [u8; Self::ADDRESS_SPACE_SIZE],
-    joypad: Joypad, // rwtodo: move back to GameBoy struct.
+    joypad: Joypad,                  // rwtodo: move back to GameBoy struct.
+    current_switchable_rom_bank: u8, // rwtodo rename to "active..."
 }
 
 impl Memory {
     const ADDRESS_SPACE_SIZE: usize = 1024 * 64;
+    const ROM_BANK_SIZE: usize = 16384; // 16kB
+
     fn new() -> Self {
         Self {
             bytes: [0; Self::ADDRESS_SPACE_SIZE],
             joypad: Joypad::new(),
+            current_switchable_rom_bank: 1,
         }
     }
 
@@ -134,6 +138,13 @@ impl Memory {
         self.bytes[INTERRUPT_FLAGS_ADDRESS] |= interrupt_flag;
         // Top 3 bits are always 1
         self.bytes[INTERRUPT_FLAGS_ADDRESS] |= 0xe0; // rwtodo is there binary syntax for this?
+    }
+
+    fn init_first_rom_banks(&mut self, file_data: &[u8]) {
+        let banks_src = &file_data[..(Self::ROM_BANK_SIZE * 2)];
+        let banks_dst = &mut self.bytes[..(Self::ROM_BANK_SIZE * 2)];
+        banks_dst.copy_from_slice(banks_src);
+        self.current_switchable_rom_bank = 1;
     }
 }
 
