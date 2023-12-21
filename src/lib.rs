@@ -215,8 +215,13 @@ impl Cpu {
         self.finish_instruction(0, 16);
     }
 
-    fn instruction_SET(&mut self, bit_to_set: u8, register_to_set: &mut u8, num_cycles: u8) {
-        *register_to_set |= 0x01 << bit_to_set;
+    fn instruction_SET(&mut self, bit_to_set: u8, byte_to_set: &mut u8, num_cycles: u8) {
+        *byte_to_set |= 0x01 << bit_to_set;
+        self.finish_instruction(1, num_cycles);
+    }
+
+    fn instruction_RES(&mut self, bit_to_reset: u8, byte_to_reset: &mut u8, num_cycles: u8) {
+        *byte_to_reset &= !(0x01 << bit_to_reset);
         self.finish_instruction(1, num_cycles);
     }
 }
