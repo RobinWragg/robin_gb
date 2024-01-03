@@ -19,10 +19,30 @@ impl CpuRegisters {
     }
 }
 
-struct Timer {}
+struct Timer {
+    cycles_since_last_tima_increment: u16,
+    incrementer_every_cycle: u16,
+}
 impl Timer {
-    fn new() -> Self {
-        Self {}
+    const DIVIDER_ADDRESS: u16 = 0xff04; /* "DIV" */
+    const COUNTER_ADDRESS: u16 = 0xff05; /* "TIMA" */
+    const MODULO_ADDRESS: u16 = 0xff06; /* "TMA" */
+    const CONTROL_ADDRESS: u16 = 0xff07; /* "TAC" */
+
+    fn new(memory: &mut Memory) -> Self {
+        let mut new_timer = Self {
+            cycles_since_last_tima_increment: 0,
+            incrementer_every_cycle: 0xabcc,
+        };
+
+        let div_byte = new_timer.incrementer_every_cycle.to_le_bytes()[1];
+        assert!(div_byte == 0xab);
+        *memory.direct_access(Self::DIVIDER_ADDRESS) = div_byte;
+        *memory.direct_access(Self::COUNTER_ADDRESS) = 0x00;
+        *memory.direct_access(Self::MODULO_ADDRESS) = 0x00;
+        *memory.direct_access(Self::CONTROL_ADDRESS) = 0x00;
+
+        new_timer
     }
 }
 
@@ -278,10 +298,13 @@ pub fn load_rom(rom_path: &str) -> Result<GameBoy, std::io::Error> {
     // rwtodo use a file-like object instead of &str?
     let rom_data = fs::read(&rom_path)?; // rwtodo
 
+    let mut memory = Memory::new();
+    let timer = Timer::new(&mut memory);
+
     Ok(GameBoy {
         lcd: Lcd::new(),
-        memory: Memory::new(),
+        memory,
         cpu: Cpu::new(),
-        timer: Timer::new(),
+        timer,
     })
 }
