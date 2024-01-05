@@ -1,18 +1,29 @@
 #![allow(unused_variables)]
 #![allow(dead_code)]
 
+fn make_u16(a: u8, b: u8) -> u16 {
+    let byte_0 = a as u16;
+    let byte_1 = b as u16;
+    (byte_0 << 8) | byte_1
+}
+
+// rwtodo more descriptive names than the z80 shorthand
 struct CpuRegisters {
-    sp: u16,   // rwtodo more descriptive names than the z80 shorthand
-    pc: u16,   // rwtodo more descriptive names than the z80 shorthand
-    ime: bool, // rwtodo more descriptive names than the z80 shorthand
+    af: u16, // rwtodo: union
+    bc: u16, // rwtodo: union
+    de: u16, // rwtodo: union
+    hl: u16, // rwtodo: union
+    sp: u16,
+    pc: u16,
+    ime: bool,
 }
 impl CpuRegisters {
     fn new() -> Self {
         Self {
-            // registers.af = 0x01b0; /* NOTE: This is different for Game Boy Pocket, Color etc. */
-            // registers.bc = 0x0013;
-            // registers.de = 0x00d8;
-            // registers.hl = 0x014d;
+            af: 0x01b0, // NOTE: This is different for Game Boy Pocket, Color etc.
+            bc: 0x0013,
+            de: 0x00d8,
+            hl: 0x014d,
             sp: 0xfffe,
             pc: 0x0100,
             ime: true,
@@ -139,6 +150,12 @@ impl Memory {
         }
     }
 
+    fn write_u16(&mut self, address: u16, value: u16) {
+        let bytes = value.to_le_bytes();
+        self.write(address, bytes[0]);
+        self.write(address + 1, bytes[1]);
+    }
+
     fn read(&self, address: u16) -> u8 {
         // rwtodo rom banks
         // if address >= 0x4000 && address < 0x8000 {
@@ -149,9 +166,7 @@ impl Memory {
     }
 
     fn read_u16(&self, address: u16) -> u16 {
-        let byte_0 = self.read(address) as u16;
-        let byte_1 = self.read(address + 1) as u16;
-        (byte_0 << 8) | byte_1
+        make_u16(self.read(address), self.read(address + 1))
     }
 
     fn request_interrupt(&mut self, interrupt_flag: u8) {
