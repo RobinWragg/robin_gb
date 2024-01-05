@@ -1,4 +1,5 @@
-use std::{cell::RefCell, rc::Rc};
+#![allow(unused_variables)]
+#![allow(dead_code)]
 
 struct CpuRegisters {
     sp: u16,   // rwtodo more descriptive names than the z80 shorthand
@@ -30,6 +31,7 @@ impl Timer {
     const CONTROL_ADDRESS: u16 = 0xff07; /* "TAC" */
 
     fn new(memory: &mut Memory) -> Self {
+        // rwtodo: why is it ok for this to be immutable? Surely it can be mutated after it is returned from this function? is it because the bchecker has concluded it's not being mutated outside of this function?
         let mut new_timer = Self {
             cycles_since_last_tima_increment: 0,
             incrementer_every_cycle: 0xabcc,
@@ -90,7 +92,7 @@ impl Memory {
 
     fn write(&mut self, address: u16, value: u8) {
         // rwtodo: convert to match statement?
-        if (address < 0x8000) {
+        if address < 0x8000 {
             // perform_cart_control(address, value); rwtodo
         } else if address == 0xff00 {
             // rwtodo: label 0xff00 as a constant?
@@ -200,6 +202,8 @@ struct Cpu {
     registers: CpuRegisters, // rwtodo maybe just put the registers in the cpu without wrapping them in a struct
     num_cycles_for_finish: u8, // rwtodo: I could perhaps just implement this as return values from all the functions.
 }
+
+#[allow(non_snake_case)] // Disable warnings for instruction names
 impl Cpu {
     fn new() -> Self {
         Self {
