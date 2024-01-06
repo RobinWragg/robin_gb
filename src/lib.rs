@@ -7,6 +7,24 @@ fn make_u16(a: u8, b: u8) -> u16 {
     (byte_0 << 8) | byte_1
 }
 
+struct Renderer {
+    shade_0: u8,
+    shade_1: u8,
+    shade_2: u8,
+    shade_3: u8,
+}
+impl Renderer {
+    const SHADE_0_FLAG: u8 = 0x04;
+    fn set_palette(&mut self, palette: u8) {
+        // SHADE_0_FLAG ensures shade_0 is unique, which streamlines the process of
+        // shade-0-dependent blitting. The flag is discarded in the final step of the render.
+        self.shade_0 = (palette & 0x03) | Self::SHADE_0_FLAG;
+        self.shade_1 = (palette & 0x0c) >> 2;
+        self.shade_2 = (palette & 0x30) >> 4;
+        self.shade_3 = (palette & 0xc0) >> 6;
+    }
+}
+
 // rwtodo more descriptive names than the z80 shorthand
 struct CpuRegisters {
     af: u16, // rwtodo: union
