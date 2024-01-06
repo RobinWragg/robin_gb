@@ -292,6 +292,16 @@ impl Cpu {
         *byte_to_reset &= !(0x01 << bit_to_reset);
         self.finish_instruction(1, num_cycles);
     }
+
+    fn instruction_CALL_condition_xx(&mut self, condition: bool, memory: &mut Memory) {
+        if condition {
+            self.stack_push(self.registers.pc + 3, memory);
+            self.registers.pc = memory.read_u16(self.registers.pc + 1);
+            self.finish_instruction(0, 24);
+        } else {
+            self.finish_instruction(3, 12);
+        }
+    }
 }
 
 pub enum Button {
