@@ -36,6 +36,11 @@ struct CpuRegisters {
     ime: bool,
 }
 impl CpuRegisters {
+    const FLAG_Z: u8 = 0x80; // Zero Flag
+    const FLAG_N: u8 = 0x40; // Add/Sub-Flag (BCD)
+    const FLAG_H: u8 = 0x20; // Half Carry Flag (BCD)
+    const FLAG_C: u8 = 0x10; // Carry Flag
+
     fn new() -> Self {
         Self {
             af: 0x01b0, // NOTE: This is different for Game Boy Pocket, Color etc.
@@ -46,6 +51,15 @@ impl CpuRegisters {
             pc: 0x0100,
             ime: true,
         }
+    }
+
+    fn f(&self) -> u8 {
+        self.af.to_le_bytes()[0]
+    }
+
+    fn set_f(&mut self, f: u8) {
+        self.af.to_le_bytes()[0] = f;
+        assert!(self.f() == f);
     }
 }
 
@@ -301,6 +315,22 @@ impl Cpu {
         } else {
             self.finish_instruction(3, 12);
         }
+    }
+
+    fn instruction_BIT(&mut self, bit_to_check: u8, byte_to_check: u8, num_cycles: u8) {
+        let mut f = self.registers.f();
+
+        if (byte_to_check & (0x01 << bit_to_check)) != 0 {
+            f &= !CpuRegisters::FLAG_Z;
+        } else {
+            f |= CpuRegisters::FLAG_Z;
+        }
+
+        f &= !CpuRegisters::FLAG_N;
+        f |= CpuRegisters::FLAG_H;
+        self.registers.set_f(f);
+
+        self.finish_instruction(1, num_cycles);
     }
 }
 
