@@ -342,6 +342,28 @@ impl Cpu {
         self.finish_instruction(pc_increment, num_cycles);
     }
 
+    fn instruction_AND(&mut self, and_input: u8, pc_increment: i16, num_cycles: u8) {
+        // rwtodo: If pc_increment is always 1, remove it as from the param list.
+
+        let result = self.registers.a() & and_input;
+        self.registers.set_a(result);
+
+        let mut f = self.registers.f();
+
+        if result == 0 {
+            f |= CpuRegisters::FLAG_ZERO;
+        } else {
+            f &= !CpuRegisters::FLAG_ZERO;
+        }
+
+        f &= !CpuRegisters::FLAG_SUBTRACTION;
+        f |= CpuRegisters::FLAG_HALFCARRY;
+        f &= !CpuRegisters::FLAG_CARRY;
+
+        self.registers.set_f(f);
+        self.finish_instruction(pc_increment, num_cycles);
+    }
+
     fn instruction_RST(&mut self, memory: &mut Memory, address_lower_byte: u8) {
         self.stack_push(self.registers.pc + 1, memory);
         self.registers.pc = address_lower_byte as u16;
