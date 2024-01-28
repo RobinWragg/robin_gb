@@ -15,6 +15,10 @@ struct Renderer {
 }
 impl Renderer {
     const SHADE_0_FLAG: u8 = 0x04;
+    const NUM_BYTES_PER_TILE: u16 = 16;
+    const NUM_BYTES_PER_TILE_LINE: u16 = 2;
+    const TILE_WIDTH: usize = 8;
+
     fn set_palette(&mut self, palette: u8) {
         // SHADE_0_FLAG ensures shade_0 is unique, which streamlines the process of
         // shade-0-dependent blitting. The flag is discarded in the final step of the render.
@@ -22,6 +26,104 @@ impl Renderer {
         self.shade_1 = (palette & 0x0c) >> 2;
         self.shade_2 = (palette & 0x30) >> 4;
         self.shade_3 = (palette & 0xc0) >> 6;
+    }
+
+    // rwtodo: Unsure of the int types here.
+    fn get_tile_line(
+        &self,
+        memory: &Memory,
+        tile_bank_address: u16,
+        tile_index: u16,
+        tile_line_index: u16,
+        line_out: &mut [u8; Self::TILE_WIDTH],
+    ) {
+        let tile_address: u16 = tile_bank_address + tile_index * Self::NUM_BYTES_PER_TILE;
+        let tile_line_address = tile_address + tile_line_index * Self::NUM_BYTES_PER_TILE_LINE;
+        let line_data = memory.read_u16(tile_line_address);
+
+        match line_data {
+            0x0000 => {
+                *line_out = [self.shade_0; Self::TILE_WIDTH];
+                return;
+            }
+            0x00ff => {
+                *line_out = [self.shade_1; Self::TILE_WIDTH];
+                return;
+            }
+            0xff00 => {
+                *line_out = [self.shade_2; Self::TILE_WIDTH];
+                return;
+            }
+            0xffff => {
+                *line_out = [self.shade_3; Self::TILE_WIDTH];
+                return;
+            }
+            _ => (),
+        }
+
+        match line_data & 0x8080 {
+            0x0000 => line_out[0] = self.shade_0,
+            0x0080 => line_out[0] = self.shade_1,
+            0x8000 => line_out[0] = self.shade_2,
+            0x8080 => line_out[0] = self.shade_3,
+            _ => unreachable!(),
+        }
+
+        match line_data & 0x4040 {
+            0x0000 => line_out[1] = self.shade_0,
+            0x0040 => line_out[1] = self.shade_1,
+            0x4000 => line_out[1] = self.shade_2,
+            0x4040 => line_out[1] = self.shade_3,
+            _ => unreachable!(),
+        }
+
+        match line_data & 0x2020 {
+            0x0000 => line_out[2] = self.shade_0,
+            0x0020 => line_out[2] = self.shade_1,
+            0x2000 => line_out[2] = self.shade_2,
+            0x2020 => line_out[2] = self.shade_3,
+            _ => unreachable!(),
+        }
+
+        match line_data & 0x1010 {
+            0x0000 => line_out[3] = self.shade_0,
+            0x0010 => line_out[3] = self.shade_1,
+            0x1000 => line_out[3] = self.shade_2,
+            0x1010 => line_out[3] = self.shade_3,
+            _ => unreachable!(),
+        }
+
+        match line_data & 0x0808 {
+            0x0000 => line_out[4] = self.shade_0,
+            0x0008 => line_out[4] = self.shade_1,
+            0x0800 => line_out[4] = self.shade_2,
+            0x0808 => line_out[4] = self.shade_3,
+            _ => unreachable!(),
+        }
+
+        match line_data & 0x0404 {
+            0x0000 => line_out[5] = self.shade_0,
+            0x0004 => line_out[5] = self.shade_1,
+            0x0400 => line_out[5] = self.shade_2,
+            0x0404 => line_out[5] = self.shade_3,
+            _ => unreachable!(),
+        }
+
+        match line_data & 0x0202 {
+            0x0000 => line_out[6] = self.shade_0,
+            0x0002 => line_out[6] = self.shade_1,
+            0x0200 => line_out[6] = self.shade_2,
+            0x0202 => line_out[6] = self.shade_3,
+            _ => unreachable!(),
+        }
+
+        match line_data & 0x0101 {
+            0x0000 => line_out[7] = self.shade_0,
+            0x0001 => line_out[7] = self.shade_1,
+            0x0100 => line_out[7] = self.shade_2,
+            0x0101 => line_out[7] = self.shade_3,
+            _ => unreachable!(),
+        }
     }
 }
 
