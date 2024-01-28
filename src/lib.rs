@@ -36,10 +36,10 @@ struct CpuRegisters {
     ime: bool,
 }
 impl CpuRegisters {
-    const FLAG_Z: u8 = 0x80; // Zero Flag
-    const FLAG_N: u8 = 0x40; // Add/Sub-Flag (BCD)
-    const FLAG_H: u8 = 0x20; // Half Carry Flag (BCD)
-    const FLAG_C: u8 = 0x10; // Carry Flag
+    const FLAG_ZERO: u8 = 0x80; // "Z", Zero Flag
+    const FLAG_SUBTRACTION: u8 = 0x40; // "N", Add/Sub-Flag (BCD)
+    const FLAG_HALFCARRY: u8 = 0x20; // "H", Half Carry Flag (BCD)
+    const FLAG_CARRY: u8 = 0x10; // "C", Carry Flag
 
     fn new() -> Self {
         Self {
@@ -51,6 +51,15 @@ impl CpuRegisters {
             pc: 0x0100,
             ime: true,
         }
+    }
+
+    fn a(&self) -> u8 {
+        self.af.to_le_bytes()[1]
+    }
+
+    fn set_a(&mut self, a: u8) {
+        self.af.to_le_bytes()[1] = a;
+        assert!(self.a() == a);
     }
 
     fn f(&self) -> u8 {
@@ -291,6 +300,26 @@ impl Cpu {
         self.num_cycles_for_finish = num_cycles_param;
     }
 
+    fn instruction_XOR(&mut self, xor_input: u8, num_cycles: u8) {
+        let result = self.registers.a() ^ xor_input;
+        self.registers.set_a(result);
+
+        let mut f = self.registers.f();
+
+        if result == 0 {
+            f |= CpuRegisters::FLAG_ZERO;
+        } else {
+            f &= !CpuRegisters::FLAG_ZERO;
+        }
+
+        f &= !CpuRegisters::FLAG_SUBTRACTION;
+        f &= !CpuRegisters::FLAG_HALFCARRY;
+        f &= !CpuRegisters::FLAG_CARRY;
+
+        self.registers.set_f(f);
+        self.finish_instruction(1, num_cycles);
+    }
+
     fn instruction_RST(&mut self, memory: &mut Memory, address_lower_byte: u8) {
         self.stack_push(self.registers.pc + 1, memory);
         self.registers.pc = address_lower_byte as u16;
@@ -321,13 +350,13 @@ impl Cpu {
         let mut f = self.registers.f();
 
         if (byte_to_check & (0x01 << bit_to_check)) != 0 {
-            f &= !CpuRegisters::FLAG_Z;
+            f &= !CpuRegisters::FLAG_ZERO;
         } else {
-            f |= CpuRegisters::FLAG_Z;
+            f |= CpuRegisters::FLAG_ZERO;
         }
 
-        f &= !CpuRegisters::FLAG_N;
-        f |= CpuRegisters::FLAG_H;
+        f &= !CpuRegisters::FLAG_SUBTRACTION;
+        f |= CpuRegisters::FLAG_HALFCARRY;
         self.registers.set_f(f);
 
         self.finish_instruction(1, num_cycles);
