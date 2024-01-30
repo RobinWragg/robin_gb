@@ -15,8 +15,9 @@ struct Renderer {
 }
 impl Renderer {
     const SHADE_0_FLAG: u8 = 0x04;
-    const NUM_BYTES_PER_TILE: u16 = 16;
-    const NUM_BYTES_PER_TILE_LINE: u16 = 2;
+    const NUM_BYTES_PER_TILE: i32 = 16;
+    const NUM_BYTES_PER_TILE_LINE: i32 = 2;
+    const NUM_TILES_PER_BG_LINE: i32 = 32;
     const TILE_WIDTH: usize = 8;
 
     fn set_palette(&mut self, palette: u8) {
@@ -33,13 +34,18 @@ impl Renderer {
         &self,
         memory: &Memory,
         tile_bank_address: u16,
-        tile_index: u16,
-        tile_line_index: u16,
+        tile_index: i16, // Must be signed!
+        tile_line_index: u8,
         line_out: &mut [u8; Self::TILE_WIDTH],
     ) {
-        let tile_address: u16 = tile_bank_address + tile_index * Self::NUM_BYTES_PER_TILE;
+        // Convert to i32 to do arithmetic
+        let tile_bank_address = tile_bank_address as i32;
+        let tile_index = tile_index as i32;
+        let tile_line_index = tile_line_index as i32;
+
+        let tile_address = tile_bank_address + tile_index * Self::NUM_BYTES_PER_TILE;
         let tile_line_address = tile_address + tile_line_index * Self::NUM_BYTES_PER_TILE_LINE;
-        let line_data = memory.read_u16(tile_line_address);
+        let line_data = memory.read_u16(tile_line_address as u16);
 
         match line_data {
             0x0000 => {
@@ -123,6 +129,45 @@ impl Renderer {
             0x0100 => line_out[7] = self.shade_2,
             0x0101 => line_out[7] = self.shade_3,
             _ => unreachable!(),
+        }
+    }
+
+    fn get_bg_tile_line(
+        &self,
+        memory: &Memory,
+        coord_x: u8,
+        coord_y: u8,
+        tile_map_address_space: u16,
+        tile_data_bank_address: u16,
+        tile_line_index: u8,
+        line_out: &mut [u8; Self::TILE_WIDTH],
+    ) {
+        // Convert to i32 to do arithmetic
+        let coord_x = coord_x as i32;
+        let coord_y = coord_y as i32;
+        let tile_map_address_space = tile_map_address_space as i32;
+
+        let tile_map_index = coord_x + coord_y * Self::NUM_TILES_PER_BG_LINE;
+        let address = tile_map_address_space + tile_map_index;
+        let tile_data_index: u8 = memory.read(address as u16); // rwtodo: this should be a direct read. consider having "direct_ref" and "direct_read" instead the hand-wavy "direct_access".
+
+        if tile_data_bank_address == 0x9000 {
+            // bank 0x9000 uses signed addressing, hence the "as i8" below.
+            self.get_tile_line(
+                memory,
+                tile_data_bank_address,
+                (tile_data_index as i8).into(),
+                tile_line_index,
+                line_out,
+            );
+        } else {
+            self.get_tile_line(
+                memory,
+                tile_data_bank_address,
+                tile_data_index.into(),
+                tile_line_index,
+                line_out,
+            );
         }
     }
 }
