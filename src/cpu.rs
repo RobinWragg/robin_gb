@@ -199,4 +199,26 @@ impl Cpu {
 
         self.finish_instruction(1, num_cycles);
     }
+
+    fn instruction_SWAP(&mut self, byte_to_swap: &mut u8, num_cycles: u8) {
+        let upper_4_bits = *byte_to_swap & 0xf0;
+        let lower_4_bits = *byte_to_swap & 0x0f;
+        *byte_to_swap = upper_4_bits >> 4;
+        *byte_to_swap |= lower_4_bits << 4;
+
+        let mut f = self.registers.f();
+
+        if *byte_to_swap == 0 {
+            f |= Registers::FLAG_ZERO;
+        } else {
+            f &= !Registers::FLAG_ZERO;
+        }
+
+        f &= !Registers::FLAG_SUBTRACTION;
+        f &= !Registers::FLAG_HALFCARRY;
+        f &= !Registers::FLAG_CARRY;
+
+        self.registers.set_f(f);
+        self.finish_instruction(1, num_cycles);
+    }
 }
