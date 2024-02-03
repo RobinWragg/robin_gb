@@ -8,19 +8,19 @@ mod render;
 use memory::Memory;
 
 mod interrupt {
+    // rwtodo if there's nothing but flags in this module, call it interrupt_flags.
     pub const FLAG_VBLANK: u8 = 0x01;
     pub const FLAG_LCD_STAT: u8 = 0x02;
     pub const FLAG_TIMER: u8 = 0x04;
     pub const FLAG_SERIAL: u8 = 0x08;
     pub const FLAG_JOYPAD: u8 = 0x10;
-
-    pub const FLAGS_ADDRESS: u16 = 0xff0f; // rwtodo move to address module
-    pub const ENABLE_ADDRESS: u16 = 0xffff; // rwtodo move to address module
 }
 
 mod address {
-    pub const LCD_CONTROL: u16 = 0xff40; // "LCDC"
-    pub const LCD_STATUS: u16 = 0xff41;
+    pub const LCD_CONTROL: usize = 0xff40; // "LCDC"
+    pub const LCD_STATUS: usize = 0xff41;
+    pub const INTERRUPT_FLAGS: usize = 0xff0f;
+    pub const INTERRUPT_ENABLE: usize = 0xffff;
 }
 
 struct Timer {

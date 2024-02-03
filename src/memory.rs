@@ -38,12 +38,12 @@ impl Memory {
         bytes[0xff24] = 0x77;
         bytes[0xff25] = 0xf3;
         bytes[0xff26] = 0xf1; // NOTE: This is different for Game Boy Color etc.
-        bytes[address::LCD_CONTROL as usize] = 0x91;
-        bytes[address::LCD_STATUS as usize] = 0x85;
+        bytes[address::LCD_CONTROL] = 0x91;
+        bytes[address::LCD_STATUS] = 0x85;
         bytes[0xff47] = 0xfc;
         bytes[0xff48] = 0xff;
         bytes[0xff49] = 0xff;
-        bytes[interrupt::FLAGS_ADDRESS as usize] = 0xe1; // TODO: Might be acceptable for this to be 0xe0
+        bytes[address::INTERRUPT_FLAGS] = 0xe1; // TODO: Might be acceptable for this to be 0xe0
 
         let new_mem = Self {
             bytes,
@@ -152,9 +152,9 @@ impl Memory {
     fn request_interrupt(&mut self, interrupt_flag: u8) {
         // Combine with the existing request flags
         // rwtodo can do this all in one call
-        self.bytes[interrupt::FLAGS_ADDRESS as usize] |= interrupt_flag;
+        self.bytes[address::INTERRUPT_FLAGS] |= interrupt_flag;
         // Top 3 bits are always 1
-        self.bytes[interrupt::FLAGS_ADDRESS as usize] |= 0xe0; // rwtodo is there binary syntax for this?
+        self.bytes[address::INTERRUPT_FLAGS] |= 0xe0; // rwtodo is there binary syntax for this?
     }
 
     fn init_first_rom_banks(&mut self, file_data: &[u8]) {
