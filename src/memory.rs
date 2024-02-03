@@ -1,3 +1,4 @@
+use crate::address;
 use crate::interrupt;
 use crate::Joypad;
 
@@ -18,11 +19,41 @@ impl Memory {
     const ROM_BANK_SIZE: usize = 16384; // 16kB
 
     pub fn new() -> Self {
-        Self {
-            bytes: [0; Self::ADDRESS_SPACE_SIZE],
+        let mut bytes = [0; Self::ADDRESS_SPACE_SIZE];
+
+        // Set all nonzero bytes.
+        bytes[0xff10] = 0x80;
+        bytes[0xff11] = 0xbf;
+        bytes[0xff12] = 0xf3;
+        bytes[0xff14] = 0xbf;
+        bytes[0xff16] = 0x3f;
+        bytes[0xff19] = 0xbf;
+        bytes[0xff1a] = 0x7f;
+        bytes[0xff1b] = 0xff;
+        bytes[0xff1c] = 0x9f;
+        bytes[0xff1e] = 0xbf;
+        bytes[0xff00] = 0xff;
+        bytes[0xff20] = 0xff;
+        bytes[0xff23] = 0xbf;
+        bytes[0xff24] = 0x77;
+        bytes[0xff25] = 0xf3;
+        bytes[0xff26] = 0xf1; // NOTE: This is different for Game Boy Color etc.
+        bytes[address::LCD_CONTROL as usize] = 0x91;
+        bytes[address::LCD_STATUS as usize] = 0x85;
+        bytes[0xff47] = 0xfc;
+        bytes[0xff48] = 0xff;
+        bytes[0xff49] = 0xff;
+        bytes[interrupt::FLAGS_ADDRESS as usize] = 0xe1; // TODO: Might be acceptable for this to be 0xe0
+
+        let new_mem = Self {
+            bytes,
             joypad: Joypad::new(),
             current_switchable_rom_bank: 1,
-        }
+        };
+
+        // init_cart_state(); // rwtodo: Lots to do to get this working.
+
+        new_mem
     }
 
     pub fn direct_access(&mut self, address: u16) -> &mut u8 {
@@ -121,9 +152,9 @@ impl Memory {
     fn request_interrupt(&mut self, interrupt_flag: u8) {
         // Combine with the existing request flags
         // rwtodo can do this all in one call
-        self.bytes[interrupt::FLAGS_ADDRESS] |= interrupt_flag;
+        self.bytes[interrupt::FLAGS_ADDRESS as usize] |= interrupt_flag;
         // Top 3 bits are always 1
-        self.bytes[interrupt::FLAGS_ADDRESS] |= 0xe0; // rwtodo is there binary syntax for this?
+        self.bytes[interrupt::FLAGS_ADDRESS as usize] |= 0xe0; // rwtodo is there binary syntax for this?
     }
 
     fn init_first_rom_banks(&mut self, file_data: &[u8]) {

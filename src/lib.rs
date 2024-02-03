@@ -14,8 +14,13 @@ mod interrupt {
     pub const FLAG_SERIAL: u8 = 0x08;
     pub const FLAG_JOYPAD: u8 = 0x10;
 
-    pub const FLAGS_ADDRESS: usize = 0xff0f;
-    pub const ENABLE_ADDRESS: usize = 0xffff;
+    pub const FLAGS_ADDRESS: u16 = 0xff0f; // rwtodo move to address module
+    pub const ENABLE_ADDRESS: u16 = 0xffff; // rwtodo move to address module
+}
+
+mod address {
+    pub const LCD_CONTROL: u16 = 0xff40; // "LCDC"
+    pub const LCD_STATUS: u16 = 0xff41;
 }
 
 struct Timer {
