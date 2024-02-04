@@ -2,22 +2,36 @@ use crate::address;
 use crate::interrupt;
 use crate::Joypad;
 
+const ROM_BANK_SIZE: usize = 16384; // 16kB
+
 fn make_u16(a: u8, b: u8) -> u16 {
     let byte_0 = a as u16;
     let byte_1 = b as u16;
     (byte_0 << 8) | byte_1
 }
 
+struct Banker {
+    active_switchable_rom_bank: u8,
+}
+
+impl Banker {
+    fn init_first_rom_banks(&mut self, bank_slots: &mut [u8; ROM_BANK_SIZE * 2], file_data: &[u8]) {
+        let banks = &file_data[..(ROM_BANK_SIZE * 2)];
+        bank_slots.copy_from_slice(banks);
+        self.active_switchable_rom_bank = 1;
+    }
+}
+
 pub struct Memory {
     bytes: [u8; Self::ADDRESS_SPACE_SIZE],
-    joypad: Joypad,                  // rwtodo: move back to GameBoy struct.
-    current_switchable_rom_bank: u8, // rwtodo rename to "active..."
+    joypad: Joypad, // rwtodo: move back to GameBoy struct.
+    banker: Banker,
 }
 
 impl Memory {
     const ADDRESS_SPACE_SIZE: usize = 1024 * 64;
-    const ROM_BANK_SIZE: usize = 16384; // 16kB
 
+    // rwtodo: Supply rom file data here so we can initialise the banks at the same time as the rest of the memory.
     pub fn new() -> Self {
         let mut bytes = [0; Self::ADDRESS_SPACE_SIZE];
 
@@ -48,7 +62,9 @@ impl Memory {
         let new_mem = Self {
             bytes,
             joypad: Joypad::new(),
-            current_switchable_rom_bank: 1,
+            banker: Banker {
+                active_switchable_rom_bank: 1,
+            },
         };
 
         // init_cart_state(); // rwtodo: Lots to do to get this working.
@@ -155,12 +171,5 @@ impl Memory {
         self.bytes[address::INTERRUPT_FLAGS] |= interrupt_flag;
         // Top 3 bits are always 1
         self.bytes[address::INTERRUPT_FLAGS] |= 0xe0; // rwtodo is there binary syntax for this?
-    }
-
-    fn init_first_rom_banks(&mut self, file_data: &[u8]) {
-        let banks_src = &file_data[..(Self::ROM_BANK_SIZE * 2)];
-        let banks_dst = &mut self.bytes[..(Self::ROM_BANK_SIZE * 2)];
-        banks_dst.copy_from_slice(banks_src);
-        self.current_switchable_rom_bank = 1;
     }
 }
