@@ -1,8 +1,52 @@
+use num_enum::TryFromPrimitive;
+
 use crate::address;
 use crate::interrupt;
 use crate::Joypad;
 
-const ROM_BANK_SIZE: usize = 16384; // 16kB
+const ROM_BANK_SIZE: usize = 16384; // 16kB // rwtodo rename to just BANK_SIZE?
+
+#[derive(TryFromPrimitive)]
+#[repr(u8)]
+enum CartKind {
+    RomOnly = 0x00,
+    Mbc1 = 0x01,
+    Mbc1Ram = 0x02,
+    Mbc1RamBattery = 0x03,
+    Mbc2 = 0x05,
+    Mbc2Battery = 0x06,
+    Ram = 0x08,
+    RamBattery = 0x09,
+    Mmm01 = 0x0b,
+    Mmm01Ram = 0x0c,
+    Mmm01RamBattery = 0x0d,
+    Mbc3TimerBattery = 0x0f,
+    Mbc3TimerRamBattery = 0x10,
+    Mbc3 = 0x11,
+    Mbc3Ram = 0x12,
+    Mbc3RamBattery = 0x13,
+    Mbc4 = 0x15,
+    Mbc4Ram = 0x16,
+    Mbc4RamBattery = 0x17,
+    Mbc5 = 0x19,
+    Mbc5Ram = 0x1a,
+    Mbc5RamBattery = 0x1b,
+    Mbc5Rumble = 0x1c,
+    Mbc5RumbleRam = 0x1d,
+    Mbc5RumbleRamBattery = 0x1e,
+    PocketCamera = 0xfc,
+    BandaiTama5 = 0xfd,
+    HuC3 = 0xfe,
+    HuC1RamBattery = 0xff,
+}
+
+#[derive(PartialEq)]
+enum Mbc {
+    None,
+    Mbc1,
+    Mbc2,
+    Mbc3,
+}
 
 fn make_u16(a: u8, b: u8) -> u16 {
     let byte_0 = a as u16;
@@ -10,15 +54,91 @@ fn make_u16(a: u8, b: u8) -> u16 {
     (byte_0 << 8) | byte_1
 }
 
+type CachedBank = [u8; ROM_BANK_SIZE];
+
 struct Banker {
+    mbc: Mbc,
+    has_ram: bool, // rwtodo do I really need this as well as ram_bank_count?
+    ram_bank_count: u8,
+    ram_is_enabled: bool,
     active_switchable_rom_bank: u8,
+    cached_banks: Vec<CachedBank>,
 }
 
 impl Banker {
-    fn init_first_rom_banks(&mut self, bank_slots: &mut [u8; ROM_BANK_SIZE * 2], file_data: &[u8]) {
+    // rwtodo: maybe Memory API access to banks should redirect through the Banker, and Banker could hold the currently active bank data, then I wouldn't need this ugliness where the Banker partially responsible for data living outside the Banker.
+    fn new(bank_slots_in_memory: &mut [u8; ROM_BANK_SIZE * 2], file_data: &[u8]) -> Banker {
+        const CART_KIND_ADDRESS: usize = 0x0147;
+        const BANK_COUNT_ID_ADDRESS: usize = 0x0148;
+
+        let cart_kind =
+            CartKind::try_from(file_data[CART_KIND_ADDRESS]).expect("Couldn't get cart kind");
+        let mbc = Self::detect_mbc(cart_kind);
+        let mut banker = Banker {
+            mbc,
+            has_ram: false,        // rwtodo
+            ram_bank_count: 0,     // rwtodo
+            ram_is_enabled: false, // rwtodo
+            active_switchable_rom_bank: 1,
+            cached_banks: vec![],
+        };
+
+        // Init first 2 banks
         let banks = &file_data[..(ROM_BANK_SIZE * 2)];
-        bank_slots.copy_from_slice(banks);
-        self.active_switchable_rom_bank = 1;
+        bank_slots_in_memory.copy_from_slice(banks);
+
+        let bank_count_id = file_data[CART_KIND_ADDRESS];
+        banker.init_additional_banks(bank_count_id, file_data);
+
+        banker
+    }
+
+    fn init_additional_banks(&mut self, bank_count_id: u8, file_data: &[u8]) {
+        self.cached_banks.clear();
+
+        let mut total_bank_count: usize;
+
+        if bank_count_id <= 0x08 {
+            total_bank_count = 2 << bank_count_id;
+        } else {
+            match bank_count_id {
+                0x52 => total_bank_count = 72,
+                0x53 => total_bank_count = 80,
+                0x54 => total_bank_count = 96,
+                _ => panic!("Unrecognized bank count ID"),
+            }
+        }
+
+        println!("Cart has a total of {} ROM banks", total_bank_count);
+
+        if total_bank_count > 2 {
+            let cached_bank_count = total_bank_count - 2;
+
+            println!("Loading the remaining {} ROM banks...\n", cached_bank_count);
+
+            let file_offset: usize = ROM_BANK_SIZE * 2; // Offset of 2, as the first 2 banks are already loaded
+
+            for bank_index in 0..cached_bank_count {
+                let bank_start = file_offset + ROM_BANK_SIZE * bank_index;
+                let mut bank_data: CachedBank = [0; ROM_BANK_SIZE];
+                bank_data.copy_from_slice(&file_data[bank_start..bank_start + ROM_BANK_SIZE]);
+                self.cached_banks.push(bank_data);
+            }
+
+            println!("Done");
+        }
+    }
+
+    fn detect_mbc(cart: CartKind) -> Mbc {
+        use CartKind::*;
+
+        match cart {
+            RomOnly | Ram | RamBattery => Mbc::None,
+            Mbc1 | Mbc1Ram | Mbc1RamBattery => Mbc::Mbc1,
+            Mbc2 | Mbc2Battery => Mbc::Mbc2,
+            Mbc3 | Mbc3Ram | Mbc3RamBattery | Mbc3TimerBattery | Mbc3TimerRamBattery => Mbc::Mbc3,
+            _ => panic!("Unsupported CartKind value"),
+        }
     }
 }
 
@@ -32,8 +152,8 @@ impl Memory {
     const ADDRESS_SPACE_SIZE: usize = 1024 * 64;
 
     // rwtodo: Supply rom file data here so we can initialise the banks at the same time as the rest of the memory.
-    pub fn new() -> Self {
-        let mut bytes = [0; Self::ADDRESS_SPACE_SIZE];
+    pub fn new(file_data: &[u8]) -> Self {
+        let mut bytes: [u8; Self::ADDRESS_SPACE_SIZE] = [0; Self::ADDRESS_SPACE_SIZE];
 
         // Set all nonzero bytes.
         bytes[0xff10] = 0x80;
@@ -59,15 +179,14 @@ impl Memory {
         bytes[0xff49] = 0xff;
         bytes[address::INTERRUPT_FLAGS] = 0xe1; // TODO: Might be acceptable for this to be 0xe0
 
+        let bank_slots = &mut bytes[..ROM_BANK_SIZE * 2];
+        let mut banker = Banker::new(bank_slots.try_into().unwrap(), file_data);
+
         let new_mem = Self {
             bytes,
             joypad: Joypad::new(),
-            banker: Banker {
-                active_switchable_rom_bank: 1,
-            },
+            banker,
         };
-
-        // init_cart_state(); // rwtodo: Lots to do to get this working.
 
         new_mem
     }
