@@ -125,6 +125,7 @@ impl Banker {
                 cached_banks.push(bank_data);
             }
 
+            assert!(cached_banks.len() == total_bank_count - 2);
             println!("Done");
         }
 
