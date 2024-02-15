@@ -69,33 +69,33 @@ impl Banker {
     // rwtodo: maybe Memory API access to banks should redirect through the Banker, and Banker could hold the currently active bank data, then I wouldn't need this ugliness where the Banker partially responsible for data living outside the Banker.
     fn new(bank_slots_in_memory: &mut [u8; ROM_BANK_SIZE * 2], file_data: &[u8]) -> Banker {
         const CART_KIND_ADDRESS: usize = 0x0147;
-        const BANK_COUNT_ID_ADDRESS: usize = 0x0148;
 
         let cart_kind =
             CartKind::try_from(file_data[CART_KIND_ADDRESS]).expect("Couldn't get cart kind");
         let mbc = Self::detect_mbc(cart_kind);
+        let cached_banks = Self::load_cache(file_data);
+
         let mut banker = Banker {
             mbc,
             has_ram: false,        // rwtodo
             ram_bank_count: 0,     // rwtodo
             ram_is_enabled: false, // rwtodo
             active_switchable_rom_bank: 1,
-            cached_banks: vec![],
+            cached_banks,
         };
 
         // Init first 2 banks
         let banks = &file_data[..(ROM_BANK_SIZE * 2)];
         bank_slots_in_memory.copy_from_slice(banks);
 
-        let bank_count_id = file_data[CART_KIND_ADDRESS];
-        banker.init_additional_banks(bank_count_id, file_data);
-
         banker
     }
 
-    fn init_additional_banks(&mut self, bank_count_id: u8, file_data: &[u8]) {
-        self.cached_banks.clear();
+    fn load_cache(file_data: &[u8]) -> Vec<CachedBank> {
+        const BANK_COUNT_ID_ADDRESS: usize = 0x0148;
+        let bank_count_id = file_data[BANK_COUNT_ID_ADDRESS];
 
+        let mut cached_banks = vec![];
         let mut total_bank_count: usize;
 
         if bank_count_id <= 0x08 {
@@ -122,11 +122,13 @@ impl Banker {
                 let bank_start = file_offset + ROM_BANK_SIZE * bank_index;
                 let mut bank_data: CachedBank = [0; ROM_BANK_SIZE];
                 bank_data.copy_from_slice(&file_data[bank_start..bank_start + ROM_BANK_SIZE]);
-                self.cached_banks.push(bank_data);
+                cached_banks.push(bank_data);
             }
 
             println!("Done");
         }
+
+        cached_banks
     }
 
     fn detect_mbc(cart: CartKind) -> Mbc {
