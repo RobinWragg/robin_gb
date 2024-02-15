@@ -108,9 +108,9 @@ impl GameBoy {
 
 pub fn load_rom(rom_path: &str) -> Result<GameBoy, std::io::Error> {
     // rwtodo use a file-like object instead of &str?
-    let rom_data = fs::read(&rom_path)?; // rwtodo
+    let rom_file_data = fs::read(&rom_path)?; // rwtodo
 
-    let mut memory = Memory::new();
+    let mut memory = Memory::new(&rom_file_data);
     let timer = Timer::new(&mut memory);
 
     Ok(GameBoy {
