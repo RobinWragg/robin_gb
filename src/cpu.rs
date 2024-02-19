@@ -1,3 +1,5 @@
+use crate::address;
+use crate::interrupt;
 use crate::Memory;
 
 //rwtodo: I can probably do something nifty with Rust attributes to make the "instruction" functions more ergonomic.
@@ -65,8 +67,54 @@ impl Cpu {
         }
     }
 
+    fn handle_interrupt_requests(&mut self, memory: &mut Memory) {
+        let mut requested_interrupts = *memory.direct_access(address::INTERRUPT_FLAGS);
+        let enabled_interrupts = *memory.direct_access(address::INTERRUPT_ENABLE);
+        let interrupts_to_handle = requested_interrupts & enabled_interrupts;
+
+        if interrupts_to_handle != 0x00 {
+            if self.is_halted {
+                self.is_halted = false;
+            }
+
+            if self.registers.ime {
+                self.registers.ime = false;
+                self.stack_push(self.registers.pc, memory);
+
+                // rwtodo can i do this with a match?
+                if interrupts_to_handle & interrupt::FLAG_VBLANK != 0 {
+                    requested_interrupts &= !interrupt::FLAG_VBLANK;
+                    self.registers.pc = 0x0040;
+                } else if interrupts_to_handle & interrupt::FLAG_LCD_STAT != 0 {
+                    requested_interrupts &= !interrupt::FLAG_LCD_STAT;
+                    self.registers.pc = 0x0048;
+                } else if interrupts_to_handle & interrupt::FLAG_TIMER != 0 {
+                    requested_interrupts &= !interrupt::FLAG_TIMER;
+                    self.registers.pc = 0x0050;
+                } else if interrupts_to_handle & interrupt::FLAG_SERIAL != 0 {
+                    requested_interrupts &= !interrupt::FLAG_SERIAL;
+                    self.registers.pc = 0x0058;
+                } else if interrupts_to_handle & interrupt::FLAG_JOYPAD != 0 {
+                    requested_interrupts &= !interrupt::FLAG_JOYPAD;
+                    self.registers.pc = 0x0060;
+                } else {
+                    unreachable!("Unexpected interrupts_to_handle value");
+                }
+
+                *memory.direct_access(address::INTERRUPT_FLAGS) = requested_interrupts;
+            }
+        }
+    }
+
     #[must_use] // Returns the number of cycles the instruction took.
     pub fn execute_next_instruction(&mut self, memory: &mut Memory) -> u8 {
+        let cycles = self.execute_next_instruction_inner(memory);
+        self.handle_interrupt_requests(memory);
+        cycles
+    }
+
+    #[must_use] // Returns the number of cycles the instruction took.
+    pub fn execute_next_instruction_inner(&mut self, memory: &mut Memory) -> u8 {
         if self.is_halted {
             return 4;
         }

@@ -7,17 +7,23 @@ mod render;
 
 use memory::Memory;
 
+// rwtodo: interrupt responsibility is shared here and in the Cpu impl, which is icky.
 mod interrupt {
-    // rwtodo if there's nothing but flags in this module, call it interrupt_flags.
+    use crate::address;
+    use crate::memory::Memory;
+
     pub const FLAG_VBLANK: u8 = 0x01;
     pub const FLAG_LCD_STAT: u8 = 0x02;
     pub const FLAG_TIMER: u8 = 0x04;
     pub const FLAG_SERIAL: u8 = 0x08;
     pub const FLAG_JOYPAD: u8 = 0x10;
 
-    pub fn dispatch() {
-        // rwtodo handle interrupts
-        panic!();
+    pub fn make_request(interrupt_flag: u8, memory: &mut Memory) {
+        // Combine with the existing request flags
+        // rwtodo can do this all in one call
+        *memory.direct_access(address::INTERRUPT_FLAGS) |= interrupt_flag;
+        // Top 3 bits are always 1
+        *memory.direct_access(address::INTERRUPT_FLAGS) |= 0xe0; // rwtodo is there binary syntax for this?
     }
 }
 
@@ -27,8 +33,8 @@ mod address {
     pub const LCD_STATUS: usize = 0xff41;
     pub const LCD_LY: usize = 0xff44;
     pub const LCD_LYC: usize = 0xff45;
-    pub const INTERRUPT_FLAGS: usize = 0xff0f;
-    pub const INTERRUPT_ENABLE: usize = 0xffff;
+    pub const INTERRUPT_FLAGS: u16 = 0xff0f;
+    pub const INTERRUPT_ENABLE: u16 = 0xffff;
 }
 
 struct Timer {
@@ -119,7 +125,6 @@ impl GameBoy {
         while *self.memory.direct_access(address::LCD_LY as u16) == previous_lcd_ly {
             let elapsed_cycles = self.cpu.execute_next_instruction(&mut self.memory);
 
-            interrupt::dispatch();
             self.lcd.update(elapsed_cycles);
             self.timer.update(elapsed_cycles);
 

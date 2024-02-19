@@ -180,7 +180,7 @@ impl Memory {
         bytes[0xff47] = 0xfc;
         bytes[0xff48] = 0xff;
         bytes[0xff49] = 0xff;
-        bytes[address::INTERRUPT_FLAGS] = 0xe1; // TODO: Might be acceptable for this to be 0xe0
+        bytes[usize::from(address::INTERRUPT_FLAGS)] = 0xe1; // TODO: Might be acceptable for this to be 0xe0
 
         let bank_slots = &mut bytes[..ROM_BANK_SIZE * 2];
         let mut banker = Banker::new(bank_slots.try_into().unwrap(), file_data);
@@ -207,12 +207,12 @@ impl Memory {
 
         if (register_value & ACTION_BUTTON_REQUEST) == 0x00 {
             register_value &= self.joypad.action_buttons;
-            self.request_interrupt(interrupt::FLAG_JOYPAD);
+            interrupt::make_request(interrupt::FLAG_JOYPAD, self);
         }
 
         if (register_value & DIRECTION_BUTTON_REQUEST) == 0x00 {
             register_value &= self.joypad.direction_buttons;
-            self.request_interrupt(interrupt::FLAG_JOYPAD);
+            interrupt::make_request(interrupt::FLAG_JOYPAD, self);
         }
 
         return register_value;
@@ -284,14 +284,5 @@ impl Memory {
 
     pub fn read_u16(&self, address: u16) -> u16 {
         make_u16(self.read(address), self.read(address + 1))
-    }
-
-    // rwtodo move to the interrupt module? bonus: FLAGS_ADDRESS can be private.
-    fn request_interrupt(&mut self, interrupt_flag: u8) {
-        // Combine with the existing request flags
-        // rwtodo can do this all in one call
-        self.bytes[address::INTERRUPT_FLAGS] |= interrupt_flag;
-        // Top 3 bits are always 1
-        self.bytes[address::INTERRUPT_FLAGS] |= 0xe0; // rwtodo is there binary syntax for this?
     }
 }
