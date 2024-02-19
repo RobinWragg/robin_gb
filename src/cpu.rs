@@ -1,6 +1,9 @@
 use crate::Memory;
 
-// rwtodo more descriptive names than the z80 shorthand
+//rwtodo: I can probably do something nifty with Rust attributes to make the "instruction" functions more ergonomic.
+
+type CycleCount = u8;
+
 struct Registers {
     af: u16, // rwtodo: union
     bc: u16, // rwtodo: union
@@ -50,7 +53,7 @@ impl Registers {
 
 pub struct Cpu {
     registers: Registers, // rwtodo maybe just put the registers in the cpu without wrapping them in a struct
-    num_cycles_for_finish: u8, // rwtodo: I could perhaps just implement this as return values from all the functions.
+    is_halted: bool,
 }
 
 #[allow(non_snake_case)] // Disable warnings for instruction names
@@ -58,14 +61,27 @@ impl Cpu {
     pub fn new() -> Self {
         Self {
             registers: Registers::new(),
-            num_cycles_for_finish: 0,
+            is_halted: false,
         }
     }
 
     #[must_use] // Returns the number of cycles the instruction took.
-    pub fn execute_next_instruction(&mut self) -> u8 {
-        panic!();
-        42
+    pub fn execute_next_instruction(&mut self, memory: &mut Memory) -> u8 {
+        if self.is_halted {
+            return 4;
+        }
+
+        let opcode = memory.read(self.registers.pc);
+
+        match opcode {
+            0x00 /* NOP */ => return self.finish_instruction(1, 4),
+            _ => {
+                unreachable!(
+                    "Unknown opcode {:#04x} at address {:#06x}\n",
+                    opcode, self.registers.pc
+                );
+            }
+        }
     }
 
     fn stack_push(&mut self, value_to_push: u16, memory: &mut Memory) {
@@ -90,12 +106,13 @@ impl Cpu {
         a + b > 0xff
     }
 
-    fn finish_instruction(&mut self, pc_increment: i16, num_cycles_param: u8) {
+    #[must_use]
+    fn finish_instruction(&mut self, pc_increment: i16, elapsed_cycles: CycleCount) -> CycleCount {
         self.registers.pc = self.registers.pc.wrapping_add_signed(pc_increment);
-        self.num_cycles_for_finish = num_cycles_param;
+        elapsed_cycles
     }
 
-    fn instruction_XOR(&mut self, xor_input: u8, num_cycles: u8) {
+    fn instruction_XOR(&mut self, xor_input: u8, num_cycles: u8) -> CycleCount {
         let result = self.registers.a() ^ xor_input;
         self.registers.set_a(result);
 
@@ -112,10 +129,10 @@ impl Cpu {
         f &= !Registers::FLAG_CARRY;
 
         self.registers.set_f(f);
-        self.finish_instruction(1, num_cycles);
+        self.finish_instruction(1, num_cycles)
     }
 
-    fn instruction_OR(&mut self, or_input: u8, pc_increment: i16, num_cycles: u8) {
+    fn instruction_OR(&mut self, or_input: u8, pc_increment: i16, num_cycles: u8) -> CycleCount {
         // rwtodo: I think pc_increment might always be 1, thereby allowing us to remove it as from the param list.
 
         let result = self.registers.a() | or_input;
@@ -134,10 +151,10 @@ impl Cpu {
         f &= !Registers::FLAG_CARRY;
 
         self.registers.set_f(f);
-        self.finish_instruction(pc_increment, num_cycles);
+        self.finish_instruction(pc_increment, num_cycles)
     }
 
-    fn instruction_AND(&mut self, and_input: u8, pc_increment: i16, num_cycles: u8) {
+    fn instruction_AND(&mut self, and_input: u8, pc_increment: i16, num_cycles: u8) -> CycleCount {
         // rwtodo: If pc_increment is always 1, remove it as from the param list.
 
         let result = self.registers.a() & and_input;
@@ -156,36 +173,55 @@ impl Cpu {
         f &= !Registers::FLAG_CARRY;
 
         self.registers.set_f(f);
-        self.finish_instruction(pc_increment, num_cycles);
+        self.finish_instruction(pc_increment, num_cycles)
     }
 
-    fn instruction_RST(&mut self, memory: &mut Memory, address_lower_byte: u8) {
+    fn instruction_RST(&mut self, memory: &mut Memory, address_lower_byte: u8) -> CycleCount {
         self.stack_push(self.registers.pc + 1, memory);
         self.registers.pc = address_lower_byte as u16;
-        self.finish_instruction(0, 16);
+        self.finish_instruction(0, 16)
     }
 
-    fn instruction_SET(&mut self, bit_to_set: u8, byte_to_set: &mut u8, num_cycles: u8) {
+    fn instruction_SET(
+        &mut self,
+        bit_to_set: u8,
+        byte_to_set: &mut u8,
+        num_cycles: u8,
+    ) -> CycleCount {
         *byte_to_set |= 0x01 << bit_to_set;
-        self.finish_instruction(1, num_cycles);
+        self.finish_instruction(1, num_cycles)
     }
 
-    fn instruction_RES(&mut self, bit_to_reset: u8, byte_to_reset: &mut u8, num_cycles: u8) {
+    fn instruction_RES(
+        &mut self,
+        bit_to_reset: u8,
+        byte_to_reset: &mut u8,
+        num_cycles: u8,
+    ) -> CycleCount {
         *byte_to_reset &= !(0x01 << bit_to_reset);
-        self.finish_instruction(1, num_cycles);
+        self.finish_instruction(1, num_cycles)
     }
 
-    fn instruction_CALL_condition_xx(&mut self, condition: bool, memory: &mut Memory) {
+    fn instruction_CALL_condition_xx(
+        &mut self,
+        condition: bool,
+        memory: &mut Memory,
+    ) -> CycleCount {
         if condition {
             self.stack_push(self.registers.pc + 3, memory);
             self.registers.pc = memory.read_u16(self.registers.pc + 1);
-            self.finish_instruction(0, 24);
+            self.finish_instruction(0, 24)
         } else {
-            self.finish_instruction(3, 12);
+            self.finish_instruction(3, 12)
         }
     }
 
-    fn instruction_BIT(&mut self, bit_to_check: u8, byte_to_check: u8, num_cycles: u8) {
+    fn instruction_BIT(
+        &mut self,
+        bit_to_check: u8,
+        byte_to_check: u8,
+        num_cycles: u8,
+    ) -> CycleCount {
         let mut f = self.registers.f();
 
         if (byte_to_check & (0x01 << bit_to_check)) != 0 {
@@ -198,10 +234,10 @@ impl Cpu {
         f |= Registers::FLAG_HALFCARRY;
         self.registers.set_f(f);
 
-        self.finish_instruction(1, num_cycles);
+        self.finish_instruction(1, num_cycles)
     }
 
-    fn instruction_SWAP(&mut self, byte_to_swap: &mut u8, num_cycles: u8) {
+    fn instruction_SWAP(&mut self, byte_to_swap: &mut u8, num_cycles: u8) -> CycleCount {
         let upper_4_bits = *byte_to_swap & 0xf0;
         let lower_4_bits = *byte_to_swap & 0x0f;
         *byte_to_swap = upper_4_bits >> 4;
@@ -220,6 +256,6 @@ impl Cpu {
         f &= !Registers::FLAG_CARRY;
 
         self.registers.set_f(f);
-        self.finish_instruction(1, num_cycles);
+        self.finish_instruction(1, num_cycles)
     }
 }

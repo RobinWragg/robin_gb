@@ -110,15 +110,14 @@ pub struct GameBoy {
 
 impl GameBoy {
     // rwtodo: returns true if not vblank. not a fan. enum?
-    fn update_screen_line(&mut self) -> bool {
-        let lcd_ly = self.memory.direct_access(address::LCD_LY as u16);
-        let previous_lcd_ly = *lcd_ly;
+    fn emulate_next_lcd_line(&mut self) -> bool {
+        let previous_lcd_ly = *self.memory.direct_access(address::LCD_LY as u16);
 
         let mut total_elapsed_cycles_this_h_blank: u32 = 0;
 
         // Execute instructions until a horizontal-blank occurs.
-        while *lcd_ly == previous_lcd_ly {
-            let elapsed_cycles = self.cpu.execute_next_instruction();
+        while *self.memory.direct_access(address::LCD_LY as u16) == previous_lcd_ly {
+            let elapsed_cycles = self.cpu.execute_next_instruction(&mut self.memory);
 
             interrupt::dispatch();
             self.lcd.update(elapsed_cycles);
@@ -138,10 +137,10 @@ impl GameBoy {
         // rwtodo run cpu etc
 
         // Call the function until the vblank phase is exited.
-        while self.update_screen_line() == false {}
+        while self.emulate_next_lcd_line() == false {}
 
         // Call the function until the vblank phase is entered again.
-        while self.update_screen_line() != true {}
+        while self.emulate_next_lcd_line() != true {}
 
         // The screen has now been fully updated.
         self.lcd.pixel_data()
