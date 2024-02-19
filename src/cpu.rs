@@ -62,9 +62,10 @@ impl Cpu {
         }
     }
 
-    pub fn execute_next_instruction(&mut self)
-    /*rwtodo do I need to return anything here? Handle lcd completion state elsewhere? */
-    {
+    #[must_use] // Returns the number of cycles the instruction took.
+    pub fn execute_next_instruction(&mut self) -> u8 {
+        panic!();
+        42
     }
 
     fn stack_push(&mut self, value_to_push: u16, memory: &mut Memory) {

@@ -14,11 +14,19 @@ mod interrupt {
     pub const FLAG_TIMER: u8 = 0x04;
     pub const FLAG_SERIAL: u8 = 0x08;
     pub const FLAG_JOYPAD: u8 = 0x10;
+
+    pub fn dispatch() {
+        // rwtodo handle interrupts
+        panic!();
+    }
 }
 
+// rwtodo: still not sure if it's most ergonomic/safe for these to be usize, or whether they should be u16 and just do .into() when u16 won't suffice..
 mod address {
     pub const LCD_CONTROL: usize = 0xff40; // "LCDC"
     pub const LCD_STATUS: usize = 0xff41;
+    pub const LCD_LY: usize = 0xff44;
+    pub const LCD_LYC: usize = 0xff45;
     pub const INTERRUPT_FLAGS: usize = 0xff0f;
     pub const INTERRUPT_ENABLE: usize = 0xffff;
 }
@@ -49,6 +57,10 @@ impl Timer {
 
         new_timer
     }
+
+    fn update(&mut self, elapsed_cycles: u8) {
+        panic!();
+    }
 }
 
 struct Lcd {}
@@ -59,12 +71,15 @@ impl Lcd {
     fn new() -> Self {
         Self {}
     }
+
+    fn update(&mut self, elapsed_cycles: u8) {
+        panic!();
+    }
+
     fn pixel_data(&self) -> [u8; Lcd::PIXEL_COUNT] {
         [127; Lcd::PIXEL_COUNT] // rwtodo just returning grey for now
     }
 }
-
-use std::fs;
 
 struct Joypad {
     action_buttons: u8,
@@ -94,9 +109,41 @@ pub struct GameBoy {
 }
 
 impl GameBoy {
+    // rwtodo: returns true if not vblank. not a fan. enum?
+    fn update_screen_line(&mut self) -> bool {
+        let lcd_ly = self.memory.direct_access(address::LCD_LY as u16);
+        let previous_lcd_ly = *lcd_ly;
+
+        let mut total_elapsed_cycles_this_h_blank: u32 = 0;
+
+        // Execute instructions until a horizontal-blank occurs.
+        while *lcd_ly == previous_lcd_ly {
+            let elapsed_cycles = self.cpu.execute_next_instruction();
+
+            interrupt::dispatch();
+            self.lcd.update(elapsed_cycles);
+            self.timer.update(elapsed_cycles);
+
+            // rwtodo discuss why I can't do .into() here.
+            total_elapsed_cycles_this_h_blank += u32::from(elapsed_cycles);
+        }
+
+        // rwtodo: update audio right here.
+
+        // Return false if LY has advanced past the vblank stage.
+        previous_lcd_ly < 144
+    }
+
     pub fn emulate_next_frame(&mut self) -> [u8; Lcd::PIXEL_COUNT] {
         // rwtodo run cpu etc
-        self.cpu.execute_next_instruction();
+
+        // Call the function until the vblank phase is exited.
+        while self.update_screen_line() == false {}
+
+        // Call the function until the vblank phase is entered again.
+        while self.update_screen_line() != true {}
+
+        // The screen has now been fully updated.
         self.lcd.pixel_data()
     }
 
@@ -106,10 +153,7 @@ impl GameBoy {
     }
 }
 
-pub fn load_rom(rom_path: &str) -> Result<GameBoy, std::io::Error> {
-    // rwtodo use a file-like object instead of &str?
-    let rom_file_data = fs::read(&rom_path)?; // rwtodo
-
+pub fn load_rom_file(rom_file_data: &[u8]) -> Result<GameBoy, std::io::Error> {
     let mut memory = Memory::new(&rom_file_data);
     let timer = Timer::new(&mut memory);
 

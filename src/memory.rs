@@ -75,7 +75,7 @@ impl Banker {
         let mbc = Self::detect_mbc(cart_kind);
         let cached_banks = Self::load_cache(file_data);
 
-        let mut banker = Banker {
+        let banker = Banker {
             mbc,
             has_ram: false,        // rwtodo
             ram_bank_count: 0,     // rwtodo
