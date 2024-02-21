@@ -175,8 +175,8 @@ impl Memory {
         bytes[0xff24] = 0x77;
         bytes[0xff25] = 0xf3;
         bytes[0xff26] = 0xf1; // NOTE: This is different for Game Boy Color etc.
-        bytes[address::LCD_CONTROL] = 0x91;
-        bytes[address::LCD_STATUS] = 0x85;
+        bytes[usize::from(address::LCD_CONTROL)] = 0x91;
+        bytes[usize::from(address::LCD_STATUS)] = 0x85;
         bytes[0xff47] = 0xfc;
         bytes[0xff48] = 0xff;
         bytes[0xff49] = 0xff;

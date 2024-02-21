@@ -27,12 +27,11 @@ mod interrupt {
     }
 }
 
-// rwtodo: still not sure if it's most ergonomic/safe for these to be usize, or whether they should be u16 and just do .into() when u16 won't suffice..
 mod address {
-    pub const LCD_CONTROL: usize = 0xff40; // "LCDC"
-    pub const LCD_STATUS: usize = 0xff41;
-    pub const LCD_LY: usize = 0xff44;
-    pub const LCD_LYC: usize = 0xff45;
+    pub const LCD_CONTROL: u16 = 0xff40; // "LCDC"
+    pub const LCD_STATUS: u16 = 0xff41;
+    pub const LCD_LY: u16 = 0xff44;
+    pub const LCD_LYC: u16 = 0xff45;
     pub const INTERRUPT_FLAGS: u16 = 0xff0f;
     pub const INTERRUPT_ENABLE: u16 = 0xffff;
 }
@@ -42,10 +41,10 @@ struct Timer {
     incrementer_every_cycle: u16,
 }
 impl Timer {
-    const DIVIDER_ADDRESS: u16 = 0xff04; /* "DIV" */
-    const COUNTER_ADDRESS: u16 = 0xff05; /* "TIMA" */
-    const MODULO_ADDRESS: u16 = 0xff06; /* "TMA" */
-    const CONTROL_ADDRESS: u16 = 0xff07; /* "TAC" */
+    const DIVIDER_ADDRESS: u16 = 0xff04; // "DIV"
+    const COUNTER_ADDRESS: u16 = 0xff05; // "TIMA"
+    const MODULO_ADDRESS: u16 = 0xff06; // "TMA"
+    const CONTROL_ADDRESS: u16 = 0xff07; // "TAC"
 
     fn new(memory: &mut Memory) -> Self {
         // rwtodo: why is it ok for this to be immutable? Surely it can be mutated after it is returned from this function? is it because the bchecker has concluded it's not being mutated outside of this function?
@@ -69,17 +68,127 @@ impl Timer {
     }
 }
 
-struct Lcd {}
+/* TODO: "Each bit is set to 1 automatically when an internal signal from that subsystem goes from '0' to '1', it doesn't matter if the corresponding bit in IE is set. This is specially important in the case of LCD STAT interrupt, as it will be explained in the video controller chapter." */
+
+/* TODO: "When using a status interrupt in DMG or in CGB in DMG mode, register IF should be set to 0 after the value of the STAT register is set. (In DMG, setting the STAT register value changes the value of the IF register, and an interrupt is generated at the same time as interrupts are enabled.)" */
+
+/*
+TODO:
+"8.7. STAT Interrupt
+This interrupt can be configured with register STAT.
+The STAT IRQ is trigged by an internal signal.
+This signal is set to 1 if:
+    ( (LY = LYC) AND (STAT.ENABLE_LYC_COMPARE = 1) ) OR
+    ( (ScreenMode = 0) AND (STAT.ENABLE_HBL = 1) ) OR
+    ( (ScreenMode = 2) AND (STAT.ENABLE_OAM = 1) ) OR
+    ( (ScreenMode = 1) AND (STAT.ENABLE_VBL || STAT.ENABLE_OAM) ) -> Not only VBL!!??
+-If LCD is off, the signal is 0.
+-It seems that this interrupt needs less time to execute in DMG than in CGB? -DMG bug?"
+*/
+struct Lcd {
+    elapsed_cycles: u32, // rwtodo if this needs to be i32, fine.
+}
 impl Lcd {
     const WIDTH: usize = 160; // rwtodo would there be any benefit to these being u8?
     const HEIGHT: usize = 144; // rwtodo would there be any benefit to these being u8?
     const PIXEL_COUNT: usize = Lcd::WIDTH * Lcd::HEIGHT;
     fn new() -> Self {
-        Self {}
+        Self { elapsed_cycles: 0 }
     }
 
-    fn update(&mut self, elapsed_cycles: u8) {
-        panic!();
+    // rwtodo return an Option, "Some" if rendered?
+    fn update(&mut self, newly_elapsed_cycles: u8, memory: &mut Memory) {
+        const LCDC_ENABLED_BIT: u8 = 0x01 << 7;
+        const NUM_CYCLES_PER_FULL_SCREEN_REFRESH: u32 = 70224; // Approximately 59.7275Hz
+        const NUM_CYCLES_PER_LY_INCREMENT: u32 = 456;
+        const LY_VBLANK_ENTRY_VALUE: u8 = 144;
+        const LY_MAXIMUM_VALUE: u8 = 154;
+        const MODE_0_CYCLE_DURATION: u32 = 204;
+        const MODE_1_CYCLE_DURATION: u32 = 4560;
+        const MODE_2_CYCLE_DURATION: u32 = 80;
+        const MODE_3_CYCLE_DURATION: u32 = 172;
+
+        if (memory.read(address::LCD_CONTROL) & LCDC_ENABLED_BIT) == 0 {
+            // Bit 7 of the LCD control register is 0, so the LCD is switched off.
+            // LY, the mode, and the LYC=LY flag should all be 0.
+            memory.write(address::LCD_LY, 0x00);
+            memory.write(address::LCD_STATUS, 0xf8);
+            return;
+        }
+
+        // rwtodo I can do into() here to add u8 to i32, why couldn't I do it elsewhere?
+        self.elapsed_cycles += u32::from(newly_elapsed_cycles);
+
+        // Set LY.
+        if self.elapsed_cycles >= NUM_CYCLES_PER_LY_INCREMENT {
+            self.elapsed_cycles -= NUM_CYCLES_PER_LY_INCREMENT;
+            // rwtodo: Won't this logic cause LY to skip its maximum value?
+            let ly = memory.direct_access(address::LCD_LY);
+            *ly += 1;
+            if *ly >= LY_MAXIMUM_VALUE {
+                *ly = 0;
+            }
+        }
+
+        // Handle LYC.
+        if memory.read(address::LCD_LY) == memory.read(address::LCD_LYC) {
+            *memory.direct_access(address::LCD_STATUS) |= 0x04;
+            if memory.read(address::LCD_STATUS) & 0x40 != 0 {
+                interrupt::make_request(interrupt::FLAG_LCD_STAT, memory);
+            }
+        } else {
+            *memory.direct_access(address::LCD_STATUS) &= !0x04;
+        }
+
+        // Set the mode.
+        let previous_mode: u8;
+        {
+            let status = memory.direct_access(address::LCD_STATUS);
+            previous_mode = *status & 0x03; // Get lower 2 bits only.
+            *status &= 0xfc; // Discard the old mode.
+        }
+
+        if memory.read(address::LCD_LY) < LY_VBLANK_ENTRY_VALUE {
+            /*
+            Approx mode graph:
+            Mode 2  2_____2_____2_____2_____2_____2___________________2____
+            Mode 3  _33____33____33____33____33____33__________________3___
+            Mode 0  ___000___000___000___000___000___000________________000
+            Mode 1  ____________________________________11111111111111_____
+            */
+
+            if self.elapsed_cycles >= MODE_2_CYCLE_DURATION + MODE_3_CYCLE_DURATION {
+                *memory.direct_access(address::LCD_STATUS) |= 0x00; // H-blank.
+
+                if previous_mode != 0x00 && (memory.read(address::LCD_STATUS) & 0x08) != 0 {
+                    interrupt::make_request(interrupt::FLAG_LCD_STAT, memory);
+                }
+            } else if self.elapsed_cycles >= MODE_2_CYCLE_DURATION {
+                // Declare that the LCD is reading from both OAM and VRAM.
+                *memory.direct_access(address::LCD_STATUS) |= 0x03;
+
+                if previous_mode != 0x03 {
+                    panic!(); // rwtodo robingb_render_screen_line();
+                }
+            } else {
+                // Declare that the LCD is reading from OAM.
+                *memory.direct_access(address::LCD_STATUS) |= 0x02;
+
+                if previous_mode != 0x02 && (memory.read(address::LCD_STATUS) & 0x20) != 0 {
+                    interrupt::make_request(interrupt::FLAG_LCD_STAT, memory);
+                }
+            }
+        } else {
+            *memory.direct_access(address::LCD_STATUS) |= 0x01; // V-blank.
+
+            if previous_mode != 0x01 {
+                interrupt::make_request(interrupt::FLAG_VBLANK, memory);
+
+                if (memory.read(address::LCD_STATUS) & 0x10) != 0 {
+                    interrupt::make_request(interrupt::FLAG_LCD_STAT, memory);
+                }
+            }
+        }
     }
 
     fn pixel_data(&self) -> [u8; Lcd::PIXEL_COUNT] {
@@ -117,15 +226,15 @@ pub struct GameBoy {
 impl GameBoy {
     // rwtodo: returns true if not vblank. not a fan. enum?
     fn emulate_next_lcd_line(&mut self) -> bool {
-        let previous_lcd_ly = *self.memory.direct_access(address::LCD_LY as u16);
+        let previous_lcd_ly = *self.memory.direct_access(address::LCD_LY);
 
         let mut total_elapsed_cycles_this_h_blank: u32 = 0;
 
         // Execute instructions until a horizontal-blank occurs.
-        while *self.memory.direct_access(address::LCD_LY as u16) == previous_lcd_ly {
+        while *self.memory.direct_access(address::LCD_LY) == previous_lcd_ly {
             let elapsed_cycles = self.cpu.execute_next_instruction(&mut self.memory);
 
-            self.lcd.update(elapsed_cycles);
+            self.lcd.update(elapsed_cycles, &mut self.memory);
             self.timer.update(elapsed_cycles);
 
             // rwtodo discuss why I can't do .into() here.
