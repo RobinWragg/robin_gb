@@ -121,15 +121,19 @@ impl Cpu {
 
         let opcode = memory.read(self.registers.pc);
 
-        match opcode {
+        return match opcode {
             0x00 /* NOP */ => return self.finish_instruction(1, 4),
+            0xc3 /* JP xx */ => {
+                self.registers.pc = memory.read_u16(self.registers.pc + 1);
+                self.finish_instruction(0, 16)
+            },
             _ => {
                 unreachable!(
                     "Unknown opcode {:#04x} at address {:#06x}\n",
                     opcode, self.registers.pc
-                );
+                )
             }
-        }
+        };
     }
 
     fn stack_push(&mut self, value_to_push: u16, memory: &mut Memory) {
@@ -146,18 +150,67 @@ impl Cpu {
         popped_value
     }
 
+    // rwtodo: These probably take u8 arguments, so I might end up calling .into() a lot...
     fn subtraction_produces_u8_full_carry(a: i16, b: i16) -> bool {
         a - b < 0
     }
 
+    // rwtodo: These probably take u8 arguments, so I might end up calling .into() a lot...
     fn addition_produces_u8_full_carry(a: i16, b: i16) -> bool {
         a + b > 0xff
+    }
+
+    // rwtodo: These probably take u8 arguments, so I might end up calling .into() a lot...
+    fn negate_produces_u8_half_carry(&self, a: i16, b: i16, include_carry: bool) -> bool {
+        let optional_carry: i16 =
+            if include_carry && (self.registers.f() & Registers::FLAG_CARRY) != 0 {
+                1
+            } else {
+                0
+            };
+
+        (a & 0x0f) - (b & 0x0f) - optional_carry < 0
+    }
+
+    // rwtodo: These probably take u8 arguments, so I might end up calling .into() a lot...
+    fn addition_produces_u8_half_carry(&self, a: i16, b: i16, include_carry: bool) -> bool {
+        let optional_carry: i16 =
+            if include_carry && (self.registers.f() & Registers::FLAG_CARRY) != 0 {
+                1
+            } else {
+                0
+            };
+
+        (a & 0x0f) + (b & 0x0f) + optional_carry > 0x0f
     }
 
     #[must_use]
     fn finish_instruction(&mut self, pc_increment: i16, elapsed_cycles: CycleCount) -> CycleCount {
         self.registers.pc = self.registers.pc.wrapping_add_signed(pc_increment);
         elapsed_cycles
+    }
+
+    fn instruction_INC_u8(&mut self, value_to_increment: &mut u8, num_cycles: u8) -> CycleCount {
+        let mut f = self.registers.f();
+
+        if self.addition_produces_u8_half_carry((*value_to_increment).into(), 1, false) {
+            f |= Registers::FLAG_HALFCARRY;
+        } else {
+            f &= !Registers::FLAG_HALFCARRY;
+        }
+
+        *value_to_increment += 1;
+
+        if *value_to_increment != 0 {
+            f &= !Registers::FLAG_ZERO;
+        } else {
+            f |= Registers::FLAG_ZERO;
+        }
+
+        f &= !Registers::FLAG_SUBTRACTION;
+
+        self.registers.set_f(f);
+        self.finish_instruction(1, num_cycles)
     }
 
     fn instruction_XOR(&mut self, xor_input: u8, num_cycles: u8) -> CycleCount {

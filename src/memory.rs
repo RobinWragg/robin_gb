@@ -219,6 +219,8 @@ impl Memory {
     }
 
     pub fn write(&mut self, address: u16, value: u8) {
+        // rwtodo: let address: usize = address.into(); ?
+
         // rwtodo: convert to match statement?
         if address < 0x8000 {
             // perform_cart_control(address, value); rwtodo
