@@ -37,34 +37,72 @@ mod address {
 }
 
 struct Timer {
-    cycles_since_last_tima_increment: u16,
+    cycles_since_last_tima_increment: u16, // rwtodo: rename to cycles_since_last_counter_increment? search everywhere for "tima".
     incrementer_every_cycle: u16,
 }
 impl Timer {
+    // rwtodo: put in address module?
     const DIVIDER_ADDRESS: u16 = 0xff04; // "DIV"
     const COUNTER_ADDRESS: u16 = 0xff05; // "TIMA"
     const MODULO_ADDRESS: u16 = 0xff06; // "TMA"
     const CONTROL_ADDRESS: u16 = 0xff07; // "TAC"
 
+    const MINIMUM_CYCLES_PER_COUNTER_INCREMENT: u16 = 16;
+
     fn new(memory: &mut Memory) -> Self {
-        // rwtodo: why is it ok for this to be immutable? Surely it can be mutated after it is returned from this function? is it because the bchecker has concluded it's not being mutated outside of this function?
-        let mut new_timer = Self {
+        let new_timer = Self {
             cycles_since_last_tima_increment: 0,
             incrementer_every_cycle: 0xabcc,
         };
 
         let div_byte = new_timer.incrementer_every_cycle.to_le_bytes()[1];
         assert!(div_byte == 0xab);
-        *memory.direct_access(Self::DIVIDER_ADDRESS) = div_byte;
-        *memory.direct_access(Self::COUNTER_ADDRESS) = 0x00;
-        *memory.direct_access(Self::MODULO_ADDRESS) = 0x00;
-        *memory.direct_access(Self::CONTROL_ADDRESS) = 0x00;
+        memory.write(Self::DIVIDER_ADDRESS, div_byte);
+        assert!(memory.read(Self::COUNTER_ADDRESS) == 0x00);
+        assert!(memory.read(Self::MODULO_ADDRESS) == 0x00);
+        assert!(memory.read(Self::CONTROL_ADDRESS) == 0x00);
 
         new_timer
     }
 
-    fn update(&mut self, elapsed_cycles: u8) {
-        panic!();
+    fn update(&mut self, elapsed_cycles: u8, memory: &mut Memory) {
+        let elapsed_cycles: u16 = elapsed_cycles.into();
+        let control_value = memory.read(Self::CONTROL_ADDRESS);
+
+        // Update the incrementer and keep the DIV register in sync.
+        self.incrementer_every_cycle += elapsed_cycles;
+        let div_byte = self.incrementer_every_cycle.to_le_bytes()[1];
+        memory.write(Self::DIVIDER_ADDRESS, div_byte);
+
+        // If the timer is enabled, update TIMA and potentially request an interrupt.
+        if control_value & 0x04 != 0 {
+            self.cycles_since_last_tima_increment += elapsed_cycles;
+
+            if self.cycles_since_last_tima_increment >= Self::MINIMUM_CYCLES_PER_COUNTER_INCREMENT {
+                // Calculate actual cycles per TIMA increment from the lowest 2 bits.
+                let cycles_per_tima_increment = match control_value & 0x03 {
+                    0x00 => 1024,
+                    0x01 => 16,
+                    0x02 => 64,
+                    0x03 => 256,
+                    _ => unreachable!(),
+                };
+
+                if self.cycles_since_last_tima_increment >= cycles_per_tima_increment {
+                    let counter = memory.read(Self::COUNTER_ADDRESS);
+                    let previous_tima_value = counter;
+                    memory.write(Self::COUNTER_ADDRESS, counter + 1);
+
+                    // Check for overflow.
+                    if previous_tima_value > counter {
+                        memory.write(Self::CONTROL_ADDRESS, memory.read(Self::MODULO_ADDRESS));
+                        interrupt::make_request(interrupt::FLAG_TIMER, memory);
+                    }
+
+                    self.cycles_since_last_tima_increment -= cycles_per_tima_increment;
+                }
+            }
+        }
     }
 }
 
@@ -235,7 +273,7 @@ impl GameBoy {
             let elapsed_cycles = self.cpu.execute_next_instruction(&mut self.memory);
 
             self.lcd.update(elapsed_cycles, &mut self.memory);
-            self.timer.update(elapsed_cycles);
+            self.timer.update(elapsed_cycles, &mut self.memory);
 
             // rwtodo discuss why I can't do .into() here.
             total_elapsed_cycles_this_h_blank += u32::from(elapsed_cycles);
