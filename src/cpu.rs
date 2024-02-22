@@ -48,8 +48,21 @@ impl Registers {
     }
 
     fn set_f(&mut self, f: u8) {
-        self.af.to_le_bytes()[0] = f;
+        self.af = u16::from(f) | u16::from(self.a()) << 8;
         assert!(self.f() == f);
+    }
+
+    fn h(&self) -> u8 {
+        self.hl.to_le_bytes()[1]
+    }
+
+    fn l(&self) -> u8 {
+        self.hl.to_le_bytes()[0]
+    }
+
+    fn set_l(&mut self, l: u8) {
+        self.hl = u16::from(l) | u16::from(self.h()) << 8;
+        assert!(self.l() == l);
     }
 }
 
@@ -123,6 +136,13 @@ impl Cpu {
 
         return match opcode {
             0x00 /* NOP */ => return self.finish_instruction(1, 4),
+            0x2c /* INC L */ => {
+                // rwtodo: I feel a bit iffy about not incrementing the L register directly.
+                let mut l = self.registers.l();
+                let cycle_count = self.instruction_INC_u8(&mut l, 4);
+                self.registers.set_l(l);
+                cycle_count
+            },
             0xc3 /* JP xx */ => {
                 self.registers.pc = memory.read_u16(self.registers.pc + 1);
                 self.finish_instruction(0, 16)
