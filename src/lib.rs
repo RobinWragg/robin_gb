@@ -7,6 +7,12 @@ mod render;
 
 use memory::Memory;
 
+fn make_u16(lower_nibble: u8, upper_nibble: u8) -> u16 {
+    let lower_nibble = u16::from(lower_nibble);
+    let upper_nibble = u16::from(upper_nibble);
+    lower_nibble | (upper_nibble << 8)
+}
+
 // rwtodo: interrupt responsibility is shared here and in the Cpu impl, which is icky.
 mod interrupt {
     use crate::address;

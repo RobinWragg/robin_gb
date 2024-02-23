@@ -2,6 +2,7 @@ use num_enum::TryFromPrimitive;
 
 use crate::address;
 use crate::interrupt;
+use crate::make_u16;
 use crate::Joypad;
 
 const ROM_BANK_SIZE: usize = 16384; // 16kB // rwtodo rename to just BANK_SIZE?
@@ -46,12 +47,6 @@ enum Mbc {
     Mbc1,
     Mbc2,
     Mbc3,
-}
-
-fn make_u16(a: u8, b: u8) -> u16 {
-    let byte_0 = a as u16;
-    let byte_1 = b as u16;
-    (byte_0 << 8) | byte_1
 }
 
 type CachedBank = [u8; ROM_BANK_SIZE];

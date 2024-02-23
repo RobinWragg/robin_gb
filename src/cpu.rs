@@ -1,10 +1,65 @@
 use crate::address;
 use crate::interrupt;
+use crate::make_u16;
 use crate::Memory;
 
 //rwtodo: I can probably do something nifty with Rust attributes to make the "instruction" functions more ergonomic.
 
 // rwtodo: Apparently STOP is like HALT except the LCD is inoperational as well, and the "stopped" state is only exited when a button is pressed. Look for better documentation on it.
+
+fn print_instruction(pc: u16, memory: &mut Memory) {
+    let opcode = memory.read(pc);
+    match opcode {
+        0x00 => println!("NOP"), // NOP
+        0x11 => println!("LD DE,{:#06x}", memory.read_u16(pc + 1)),
+        0x2c => println!("INC L"),
+        0x53 => println!("LD D,E"),
+        0x40 => println!("LD B,B"),
+        0x41 => println!("LD B,C"),
+        0x42 => println!("LD B,D"),
+        0x43 => println!("LD B,E"),
+        0x44 => println!("LD B,H"),
+        0x45 => println!("LD B,L"),
+        0x47 => println!("LD B,A"),
+        0x48 => println!("LD C,B"),
+        0x49 => println!("LD C,C"),
+        0x4a => println!("LD C,D"),
+        0x4b => println!("LD C,E"),
+        0x4c => println!("LD C,H"),
+        0x4d => println!("LD C,L"),
+        0x4f => println!("LD C,A"),
+        0x50 => println!("LD D,B"),
+        0x51 => println!("LD D,C"),
+        0x52 => println!("LD D,D"),
+        0x54 => println!("LD D,H"),
+        0x55 => println!("LD D,L"),
+        0x57 => println!("LD D,A"),
+        0x58 => println!("LD E,B"),
+        0x59 => println!("LD E,C"),
+        0x5a => println!("LD E,D"),
+        0x5b => println!("LD E,E"),
+        0x5c => println!("LD E,H"),
+        0x5d => println!("LD E,L"),
+        0x5f => println!("LD E,A"),
+        0x60 => println!("LD H,B"),
+        0x61 => println!("LD H,C"),
+        0x62 => println!("LD H,D"),
+        0x63 => println!("LD H,E"),
+        0x64 => println!("LD H,H"),
+        0x65 => println!("LD H,L"),
+        0x67 => println!("LD H,A"),
+        0x68 => println!("LD L,B"),
+        0x69 => println!("LD L,C"),
+        0x6a => println!("LD L,D"),
+        0x6b => println!("LD L,E"),
+        0x6c => println!("LD L,H"),
+        0x6d => println!("LD L,L"),
+        0x6f => println!("LD L,A"),
+        0xc3 => println!("JP {:#06x}", memory.read_u16(pc + 1)),
+        0xaf => println!("XOR A"),
+        _ => println!("op {:#04x} at address {:#06x}", opcode, pc),
+    };
+}
 
 type CycleCount = u8;
 
@@ -55,7 +110,7 @@ impl Registers {
     }
 
     fn de(&self) -> u16 {
-        u16::from(self.e) | u16::from(self.d) << 8 // rwtodo rearrange without changing function?
+        make_u16(self.e, self.d)
     }
 
     fn set_de(&mut self, new_de: u16) {
@@ -133,7 +188,12 @@ mod instructions {
         }
     }
 
-    fn xor(xor_input: u8, register_a: &mut u8, register_f: &mut u8, elapsed_cycles: u8) -> Finish {
+    pub fn xor(
+        xor_input: u8,
+        register_a: &mut u8,
+        register_f: &mut u8,
+        elapsed_cycles: u8,
+    ) -> Finish {
         *register_a ^= xor_input;
 
         if *register_a == 0 {
@@ -355,11 +415,12 @@ impl Cpu {
             return 4;
         }
 
+        print_instruction(self.registers.pc, memory);
+
         let opcode = memory.read(self.registers.pc);
 
         use instructions::*;
 
-        println!("op{:#04x}", opcode);
         let finish: Finish = match opcode {
             0x00 => nop(), // NOP
             0x11 => {
@@ -413,6 +474,12 @@ impl Cpu {
             0x6c => ld_reg_reg(&mut self.registers.l, self.registers.h), // LD L,H
             0x6d => nop(), // LD L,L
             0x6f => ld_reg_reg(&mut self.registers.l, self.registers.a), // LD L,A
+            0xaf => xor(
+                self.registers.a,
+                &mut self.registers.a,
+                &mut self.registers.f,
+                4,
+            ), // XOR A
             0xc3 => {
                 self.registers.pc = memory.read_u16(self.registers.pc + 1);
                 Finish {
