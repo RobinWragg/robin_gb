@@ -366,8 +366,8 @@ impl Cpu {
                 self.registers
                     .set_de(memory.read_u16(self.registers.pc + 1));
                 Finish {
-                    pc_increment: 12,
-                    elapsed_cycles: 3,
+                    pc_increment: 3,
+                    elapsed_cycles: 12,
                 }
             } // LD DE,xx
             0x2c => inc_u8(&mut self.registers.l, &mut self.registers.f, 4), // INC L
