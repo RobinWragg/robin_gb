@@ -1,11 +1,13 @@
-use crate::Memory;
+use crate::Lcd;
+use crate::Memory; // rwtodo: how is this working? shouldn't it be memory::Memory?
 
-struct Renderer {
+pub struct Renderer {
     // rwtodo Do we really need a Renderer struct with state? or just shade state? I also don't like the naming of render::Renderer.
     shade_0: u8,
     shade_1: u8,
     shade_2: u8,
     shade_3: u8,
+    pub pixels: [u8; Lcd::PIXEL_COUNT],
 }
 
 impl Renderer {
@@ -14,6 +16,16 @@ impl Renderer {
     const NUM_BYTES_PER_TILE_LINE: i32 = 2;
     const NUM_TILES_PER_BG_LINE: i32 = 32;
     const TILE_WIDTH: usize = 8;
+
+    pub fn new() -> Self {
+        Self {
+            shade_0: 0x00,
+            shade_1: 0x00,
+            shade_2: 0x00,
+            shade_3: 0x00,
+            pixels: [255; Lcd::PIXEL_COUNT],
+        }
+    }
 
     fn set_palette(&mut self, palette: u8) {
         // SHADE_0_FLAG ensures shade_0 is unique, which streamlines the process of
@@ -164,5 +176,9 @@ impl Renderer {
                 line_out,
             );
         }
+    }
+
+    pub fn render_screen_line(&self) {
+        panic!();
     }
 }
