@@ -91,7 +91,7 @@ impl Banker {
         let bank_count_id = file_data[BANK_COUNT_ID_ADDRESS];
 
         let mut cached_banks = vec![];
-        let mut total_bank_count: usize;
+        let total_bank_count: usize;
 
         if bank_count_id <= 0x08 {
             total_bank_count = 2 << bank_count_id;
@@ -178,7 +178,7 @@ impl Memory {
         bytes[usize::from(address::INTERRUPT_FLAGS)] = 0xe1; // TODO: Might be acceptable for this to be 0xe0
 
         let bank_slots = &mut bytes[..ROM_BANK_SIZE * 2];
-        let mut banker = Banker::new(bank_slots.try_into().unwrap(), file_data);
+        let banker = Banker::new(bank_slots.try_into().unwrap(), file_data);
 
         let new_mem = Self {
             bytes,

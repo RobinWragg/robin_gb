@@ -7,7 +7,7 @@ fn main() {
     let rom_file_data = fs::read("roms/Tetris.gb").unwrap();
     let mut gb = robin_gb::load_rom_file(&rom_file_data[..]).unwrap();
 
-    for i in 0..100 {
-        let frame = gb.emulate_next_frame();
+    for _ in 0..100 {
+        let _ = gb.emulate_next_frame();
     }
 }

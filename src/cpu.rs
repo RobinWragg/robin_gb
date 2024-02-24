@@ -118,6 +118,16 @@ impl Registers {
         self.e = bytes[0];
         self.d = bytes[1];
     }
+
+    fn hl(&self) -> u16 {
+        make_u16(self.l, self.h)
+    }
+
+    fn set_hl(&mut self, new_hl: u16) {
+        let bytes = new_hl.to_le_bytes();
+        self.l = bytes[0];
+        self.h = bytes[1];
+    }
 }
 
 mod instructions {
@@ -320,6 +330,14 @@ mod instructions {
         }
     }
 
+    pub fn ld_reg_mem(dst_register: &mut u8, src_memory: u8) -> Finish {
+        *dst_register = src_memory;
+        Finish {
+            pc_increment: 2,
+            elapsed_cycles: 8,
+        }
+    }
+
     pub fn ld_reg_reg(dst_register: &mut u8, src_register: u8) -> Finish {
         *dst_register = src_register;
         Finish {
@@ -422,7 +440,9 @@ impl Cpu {
         use instructions::*;
 
         let finish: Finish = match opcode {
-            0x00 => nop(), // NOP
+            0x00 => nop(),                                                                 // NOP
+            0x06 => ld_reg_mem(&mut self.registers.b, memory.read(self.registers.pc + 1)), // LD B,x
+            0x0e => ld_reg_mem(&mut self.registers.c, memory.read(self.registers.pc + 1)), // LD C,x
             0x11 => {
                 self.registers
                     .set_de(memory.read_u16(self.registers.pc + 1));
@@ -431,49 +451,62 @@ impl Cpu {
                     elapsed_cycles: 12,
                 }
             } // LD DE,xx
-            0x2c => inc_u8(&mut self.registers.l, &mut self.registers.f, 4), // INC L
-            0x53 => ld_reg_reg(&mut self.registers.d, self.registers.e), // LD D,E
-            0x40 => nop(), // LD B,B
-            0x41 => ld_reg_reg(&mut self.registers.b, self.registers.c), // LD B,C
-            0x42 => ld_reg_reg(&mut self.registers.b, self.registers.d), // LD B,D
-            0x43 => ld_reg_reg(&mut self.registers.b, self.registers.e), // LD B,E
-            0x44 => ld_reg_reg(&mut self.registers.b, self.registers.h), // LD B,H
-            0x45 => ld_reg_reg(&mut self.registers.b, self.registers.l), // LD B,L
-            0x47 => ld_reg_reg(&mut self.registers.b, self.registers.a), // LD B,A
-            0x48 => ld_reg_reg(&mut self.registers.c, self.registers.b), // LD C,B
-            0x49 => nop(), // LD C,C
-            0x4a => ld_reg_reg(&mut self.registers.c, self.registers.d), // LD C,D
-            0x4b => ld_reg_reg(&mut self.registers.c, self.registers.e), // LD C,E
-            0x4c => ld_reg_reg(&mut self.registers.c, self.registers.h), // LD C,H
-            0x4d => ld_reg_reg(&mut self.registers.c, self.registers.l), // LD C,L
-            0x4f => ld_reg_reg(&mut self.registers.c, self.registers.a), // LD C,A
-            0x50 => ld_reg_reg(&mut self.registers.d, self.registers.b), // LD D,B
-            0x51 => ld_reg_reg(&mut self.registers.d, self.registers.c), // LD D,C
-            0x52 => nop(), // LD D,D
-            0x54 => ld_reg_reg(&mut self.registers.d, self.registers.h), // LD D,H
-            0x55 => ld_reg_reg(&mut self.registers.d, self.registers.l), // LD D,L
-            0x57 => ld_reg_reg(&mut self.registers.d, self.registers.a), // LD D,A
-            0x58 => ld_reg_reg(&mut self.registers.e, self.registers.b), // LD E,B
-            0x59 => ld_reg_reg(&mut self.registers.e, self.registers.c), // LD E,C
-            0x5a => ld_reg_reg(&mut self.registers.e, self.registers.d), // LD E,D
-            0x5b => nop(), // LD E,E
-            0x5c => ld_reg_reg(&mut self.registers.e, self.registers.h), // LD E,H
-            0x5d => ld_reg_reg(&mut self.registers.e, self.registers.l), // LD E,L
-            0x5f => ld_reg_reg(&mut self.registers.e, self.registers.a), // LD E,A
-            0x60 => ld_reg_reg(&mut self.registers.h, self.registers.b), // LD H,B
-            0x61 => ld_reg_reg(&mut self.registers.h, self.registers.c), // LD H,C
-            0x62 => ld_reg_reg(&mut self.registers.h, self.registers.d), // LD H,D
-            0x63 => ld_reg_reg(&mut self.registers.h, self.registers.e), // LD H,E
-            0x64 => nop(), // LD H,H
-            0x65 => ld_reg_reg(&mut self.registers.h, self.registers.l), // LD H,L
-            0x67 => ld_reg_reg(&mut self.registers.h, self.registers.a), // LD H,A
-            0x68 => ld_reg_reg(&mut self.registers.l, self.registers.b), // LD L,B
-            0x69 => ld_reg_reg(&mut self.registers.l, self.registers.c), // LD L,C
-            0x6a => ld_reg_reg(&mut self.registers.l, self.registers.d), // LD L,D
-            0x6b => ld_reg_reg(&mut self.registers.l, self.registers.e), // LD L,E
-            0x6c => ld_reg_reg(&mut self.registers.l, self.registers.h), // LD L,H
-            0x6d => nop(), // LD L,L
-            0x6f => ld_reg_reg(&mut self.registers.l, self.registers.a), // LD L,A
+            0x16 => ld_reg_mem(&mut self.registers.d, memory.read(self.registers.pc + 1)), // LD D,x
+            0x1e => ld_reg_mem(&mut self.registers.e, memory.read(self.registers.pc + 1)), // LD E,x
+            0x21 => {
+                self.registers
+                    .set_hl(memory.read_u16(self.registers.pc + 1));
+                Finish {
+                    pc_increment: 3,
+                    elapsed_cycles: 12,
+                }
+            }
+            0x26 => ld_reg_mem(&mut self.registers.h, memory.read(self.registers.pc + 1)), // LD H,x
+            0x2c => inc_u8(&mut self.registers.l, &mut self.registers.f, 4),               // INC L
+            0x2e => ld_reg_mem(&mut self.registers.l, memory.read(self.registers.pc + 1)), // LD L,x
+            0x3e => ld_reg_mem(&mut self.registers.a, memory.read(self.registers.pc + 1)), // LD A,x
+            0x53 => ld_reg_reg(&mut self.registers.d, self.registers.e),                   // LD D,E
+            0x40 => nop(),                                                                 // LD B,B
+            0x41 => ld_reg_reg(&mut self.registers.b, self.registers.c),                   // LD B,C
+            0x42 => ld_reg_reg(&mut self.registers.b, self.registers.d),                   // LD B,D
+            0x43 => ld_reg_reg(&mut self.registers.b, self.registers.e),                   // LD B,E
+            0x44 => ld_reg_reg(&mut self.registers.b, self.registers.h),                   // LD B,H
+            0x45 => ld_reg_reg(&mut self.registers.b, self.registers.l),                   // LD B,L
+            0x47 => ld_reg_reg(&mut self.registers.b, self.registers.a),                   // LD B,A
+            0x48 => ld_reg_reg(&mut self.registers.c, self.registers.b),                   // LD C,B
+            0x49 => nop(),                                                                 // LD C,C
+            0x4a => ld_reg_reg(&mut self.registers.c, self.registers.d),                   // LD C,D
+            0x4b => ld_reg_reg(&mut self.registers.c, self.registers.e),                   // LD C,E
+            0x4c => ld_reg_reg(&mut self.registers.c, self.registers.h),                   // LD C,H
+            0x4d => ld_reg_reg(&mut self.registers.c, self.registers.l),                   // LD C,L
+            0x4f => ld_reg_reg(&mut self.registers.c, self.registers.a),                   // LD C,A
+            0x50 => ld_reg_reg(&mut self.registers.d, self.registers.b),                   // LD D,B
+            0x51 => ld_reg_reg(&mut self.registers.d, self.registers.c),                   // LD D,C
+            0x52 => nop(),                                                                 // LD D,D
+            0x54 => ld_reg_reg(&mut self.registers.d, self.registers.h),                   // LD D,H
+            0x55 => ld_reg_reg(&mut self.registers.d, self.registers.l),                   // LD D,L
+            0x57 => ld_reg_reg(&mut self.registers.d, self.registers.a),                   // LD D,A
+            0x58 => ld_reg_reg(&mut self.registers.e, self.registers.b),                   // LD E,B
+            0x59 => ld_reg_reg(&mut self.registers.e, self.registers.c),                   // LD E,C
+            0x5a => ld_reg_reg(&mut self.registers.e, self.registers.d),                   // LD E,D
+            0x5b => nop(),                                                                 // LD E,E
+            0x5c => ld_reg_reg(&mut self.registers.e, self.registers.h),                   // LD E,H
+            0x5d => ld_reg_reg(&mut self.registers.e, self.registers.l),                   // LD E,L
+            0x5f => ld_reg_reg(&mut self.registers.e, self.registers.a),                   // LD E,A
+            0x60 => ld_reg_reg(&mut self.registers.h, self.registers.b),                   // LD H,B
+            0x61 => ld_reg_reg(&mut self.registers.h, self.registers.c),                   // LD H,C
+            0x62 => ld_reg_reg(&mut self.registers.h, self.registers.d),                   // LD H,D
+            0x63 => ld_reg_reg(&mut self.registers.h, self.registers.e),                   // LD H,E
+            0x64 => nop(),                                                                 // LD H,H
+            0x65 => ld_reg_reg(&mut self.registers.h, self.registers.l),                   // LD H,L
+            0x67 => ld_reg_reg(&mut self.registers.h, self.registers.a),                   // LD H,A
+            0x68 => ld_reg_reg(&mut self.registers.l, self.registers.b),                   // LD L,B
+            0x69 => ld_reg_reg(&mut self.registers.l, self.registers.c),                   // LD L,C
+            0x6a => ld_reg_reg(&mut self.registers.l, self.registers.d),                   // LD L,D
+            0x6b => ld_reg_reg(&mut self.registers.l, self.registers.e),                   // LD L,E
+            0x6c => ld_reg_reg(&mut self.registers.l, self.registers.h),                   // LD L,H
+            0x6d => nop(),                                                                 // LD L,L
+            0x6f => ld_reg_reg(&mut self.registers.l, self.registers.a),                   // LD L,A
             0xaf => xor(
                 self.registers.a,
                 &mut self.registers.a,
