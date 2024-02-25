@@ -10,9 +10,16 @@ use crate::Memory;
 fn print_instruction(pc: u16, memory: &mut Memory) {
     let opcode = memory.read(pc);
     match opcode {
-        0x00 => println!("NOP"), // NOP
+        0x00 => println!("NOP"),
+        0x05 => println!("DEC B"),
+        0x06 => println!("LD B,{:#04x}", memory.read(pc + 1)),
+        0x0d => println!("DEC C"),
+        0x0e => println!("LD C,{:#04x}", memory.read(pc + 1)),
         0x11 => println!("LD DE,{:#06x}", memory.read_u16(pc + 1)),
+        0x20 => println!("JR NZ,{}", 2 + memory.read(pc + 1) as i8),
+        0x21 => println!("LD HL,{:#06x}", memory.read_u16(pc + 1)),
         0x2c => println!("INC L"),
+        0x32 => println!("LD (HL-),A"),
         0x53 => println!("LD D,E"),
         0x40 => println!("LD B,B"),
         0x41 => println!("LD B,C"),
@@ -57,7 +64,7 @@ fn print_instruction(pc: u16, memory: &mut Memory) {
         0x6f => println!("LD L,A"),
         0xc3 => println!("JP {:#06x}", memory.read_u16(pc + 1)),
         0xaf => println!("XOR A"),
-        _ => println!("op {:#04x} at address {:#06x}", opcode, pc),
+        _ => panic!("op {:#04x} at address {:#06x}", opcode, pc),
     };
 }
 
@@ -485,6 +492,20 @@ impl Cpu {
             0x16 => ld_reg8_mem8(&mut self.registers.d, memory.read(self.registers.pc + 1)), // LD D,x
             0x1d => dec_reg8(&mut self.registers.e, &mut self.registers.f), // DEC E
             0x1e => ld_reg8_mem8(&mut self.registers.e, memory.read(self.registers.pc + 1)), // LD E,x
+            0x20 => {
+                if (self.registers.f & Registers::FLAG_ZERO) != 0 {
+                    Finish {
+                        pc_increment: 2,
+                        elapsed_cycles: 8,
+                    }
+                } else {
+                    let signed_pc_shift = 2 + memory.read(self.registers.pc + 1) as i8;
+                    Finish {
+                        pc_increment: signed_pc_shift.into(),
+                        elapsed_cycles: 12,
+                    }
+                }
+            } // JR NZ,s
             0x21 => {
                 self.registers
                     .set_hl(memory.read_u16(self.registers.pc + 1));
@@ -492,7 +513,7 @@ impl Cpu {
                     pc_increment: 3,
                     elapsed_cycles: 12,
                 }
-            }
+            } // LD HL,xx
             0x25 => dec_reg8(&mut self.registers.h, &mut self.registers.f), // DEC H
             0x26 => ld_reg8_mem8(&mut self.registers.h, memory.read(self.registers.pc + 1)), // LD H,x
             0x2c => inc_u8(&mut self.registers.l, &mut self.registers.f, 4), // INC L
@@ -563,6 +584,31 @@ impl Cpu {
                     elapsed_cycles: 16,
                 }
             } // JP xx
+            0xe0 => {
+                memory.write(
+                    0xff00 + u16::from(memory.read(self.registers.pc + 1)),
+                    self.registers.a,
+                );
+                Finish {
+                    pc_increment: 2,
+                    elapsed_cycles: 12,
+                }
+            } // LDH (ff00+x),A
+            0xf0 => {
+                self.registers.a =
+                    memory.read(0xff00 + u16::from(memory.read(self.registers.pc + 1)));
+                Finish {
+                    pc_increment: 2,
+                    elapsed_cycles: 12,
+                }
+            } // LDH A,(0xff00+x)
+            0xf3 => {
+                self.registers.ime = false;
+                Finish {
+                    pc_increment: 1,
+                    elapsed_cycles: 4,
+                }
+            } // DI
             _ => unreachable!(
                 "Unknown opcode {:#04x} at address {:#06x}\n",
                 opcode, self.registers.pc
