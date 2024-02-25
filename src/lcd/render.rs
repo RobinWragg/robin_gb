@@ -279,5 +279,26 @@ impl Renderer {
         }
 
         // rwtodo: only implemented background rendering for now.
+
+        // Convert from game boy 2-bit (with SHADE_0_FLAG) to target 8-bit.
+        {
+            let ly = memory.read(address::LCD_LY);
+            let first_pixel_of_screen_line = usize::from(ly) * Lcd::WIDTH;
+            let screen_line: &mut [u8; Lcd::WIDTH] = &mut self.pixels
+                [first_pixel_of_screen_line..(first_pixel_of_screen_line + Lcd::WIDTH)]
+                .try_into()
+                .expect("Screen line should be of size Lcd::WIDTH=160");
+
+            for pixel in screen_line.iter_mut() {
+                // The '& 0x03' below is to discard the SHADE_0_FLAG bit, which has already served its purpose in render_objects().
+                let mut pixel_i16 = i16::from(*pixel & 0x03);
+
+                // Flip the values and multiply to make white == 255.
+                pixel_i16 -= 3;
+                pixel_i16 *= -85;
+
+                *pixel = pixel_i16 as u8;
+            }
+        }
     }
 }
