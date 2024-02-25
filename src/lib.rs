@@ -78,7 +78,7 @@ impl Timer {
         let control_value = memory.read(Self::CONTROL_ADDRESS);
 
         // Update the incrementer and keep the DIV register in sync.
-        self.incrementer_every_cycle += elapsed_cycles;
+        self.incrementer_every_cycle = self.incrementer_every_cycle.wrapping_add(elapsed_cycles);
         let div_byte = self.incrementer_every_cycle.to_le_bytes()[1];
         memory.write(Self::DIVIDER_ADDRESS, div_byte);
 
