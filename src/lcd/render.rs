@@ -37,7 +37,7 @@ impl Renderer {
             shade_1: 0x00,
             shade_2: 0x00,
             shade_3: 0x00,
-            pixels: [255; Lcd::PIXEL_COUNT],
+            pixels: [42; Lcd::PIXEL_COUNT], // rwtodo: probably want to init it to 0xff.
         }
     }
 
