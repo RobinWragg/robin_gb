@@ -215,11 +215,11 @@ impl Renderer {
         };
 
         // Get the slice of the screen representing the current horizontal line.
-        let screen_line;
-        {
-            let first_pixel_of_line = usize::from(ly) * Lcd::WIDTH;
-            screen_line = &self.pixels[first_pixel_of_line..(first_pixel_of_line + Lcd::WIDTH)];
-        }
+        let first_pixel_of_screen_line = usize::from(ly) * Lcd::WIDTH;
+        let screen_line: &mut [u8; Lcd::WIDTH] = &mut self.pixels
+            [first_pixel_of_screen_line..(first_pixel_of_screen_line + Lcd::WIDTH)]
+            .try_into()
+            .expect("Tile destination should be of size Lcd::WIDTH=160");
 
         for tilegrid_x in 0u8..NUM_TILES_PER_BG_LINE {
             let screen_x = tilegrid_x * (TILE_WIDTH as u8) - bg_scroll_x;
