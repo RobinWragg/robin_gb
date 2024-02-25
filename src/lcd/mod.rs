@@ -112,7 +112,7 @@ impl Lcd {
                 *memory.direct_access(address::LCD_STATUS) |= 0x03;
 
                 if previous_mode != 0x03 {
-                    self.renderer.render_screen_line();
+                    self.renderer.render_screen_line(memory);
                 }
             } else {
                 // Declare that the LCD is reading from OAM.
