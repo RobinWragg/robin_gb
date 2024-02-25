@@ -20,6 +20,7 @@ fn print_instruction(pc: u16, memory: &mut Memory) {
         0x21 => println!("LD HL,{:#06x}", memory.read_u16(pc + 1)),
         0x2c => println!("INC L"),
         0x32 => println!("LD (HL-),A"),
+        0x3e => println!("LD A,{:#04x}", memory.read(pc + 1)),
         0x53 => println!("LD D,E"),
         0x40 => println!("LD B,B"),
         0x41 => println!("LD B,C"),
@@ -64,6 +65,9 @@ fn print_instruction(pc: u16, memory: &mut Memory) {
         0x6f => println!("LD L,A"),
         0xc3 => println!("JP {:#06x}", memory.read_u16(pc + 1)),
         0xaf => println!("XOR A"),
+        0xe0 => println!("LDH {:#06x},A", 0xff00 + u16::from(memory.read(pc + 1))),
+        0xf3 => println!("DI"),
+        0xf0 => println!("LDH A,{:#06x}", 0xff00 + u16::from(memory.read(pc + 1))),
         _ => panic!("op {:#04x} at address {:#06x}", opcode, pc),
     };
 }
