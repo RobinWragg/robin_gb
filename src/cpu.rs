@@ -16,7 +16,7 @@ fn print_instruction(pc: u16, memory: &mut Memory) {
         0x0d => println!("DEC C"),
         0x0e => println!("LD C,{:#04x}", memory.read(pc + 1)),
         0x11 => println!("LD DE,{:#06x}", memory.read_u16(pc + 1)),
-        0x20 => println!("JR NZ,{}", 2 + memory.read(pc + 1) as i8),
+        0x20 => println!("JR NZ,{}", 2 + i16::from(memory.read(pc + 1) as i8)),
         0x21 => println!("LD HL,{:#06x}", memory.read_u16(pc + 1)),
         0x2c => println!("INC L"),
         0x32 => println!("LD (HL-),A"),
@@ -500,9 +500,8 @@ impl Cpu {
                         elapsed_cycles: 8,
                     }
                 } else {
-                    let signed_pc_shift = 2 + memory.read(self.registers.pc + 1) as i8;
                     Finish {
-                        pc_increment: signed_pc_shift.into(),
+                        pc_increment: 2 + i16::from(memory.read(self.registers.pc + 1) as i8),
                         elapsed_cycles: 12,
                     }
                 }
@@ -517,9 +516,46 @@ impl Cpu {
             } // LD HL,xx
             0x25 => dec_reg8(&mut self.registers.h, &mut self.registers.f), // DEC H
             0x26 => ld_reg8_mem8(&mut self.registers.h, memory.read(self.registers.pc + 1)), // LD H,x
+            0x2a => {
+                self.registers.a = memory.read(self.registers.hl());
+                self.registers.set_hl(self.registers.hl() + 1);
+                Finish {
+                    pc_increment: 1,
+                    elapsed_cycles: 8,
+                }
+            } // LD A,(HL+)
             0x2c => inc_u8(&mut self.registers.l, &mut self.registers.f, 4), // INC L
             0x2d => dec_reg8(&mut self.registers.l, &mut self.registers.f),  // DEC L
             0x2e => ld_reg8_mem8(&mut self.registers.l, memory.read(self.registers.pc + 1)), // LD L,x
+            0x2f => {
+                self.registers.a ^= 0xff;
+                self.registers.f |= Registers::FLAG_SUBTRACTION;
+                self.registers.f |= Registers::FLAG_HALFCARRY;
+                Finish {
+                    pc_increment: 1,
+                    elapsed_cycles: 4,
+                }
+            } // CPL
+            0x30 => {
+                if (self.registers.f & Registers::FLAG_CARRY) == 0 {
+                    Finish {
+                        pc_increment: 2 + i16::from(memory.read(self.registers.pc + 1) as i8),
+                        elapsed_cycles: 12,
+                    }
+                } else {
+                    Finish {
+                        pc_increment: 2,
+                        elapsed_cycles: 8,
+                    }
+                }
+            } // JR NC,s
+            0x31 => {
+                self.registers.sp = memory.read_u16(self.registers.pc + 1);
+                Finish {
+                    pc_increment: 3,
+                    elapsed_cycles: 12,
+                }
+            } // LD SP,xx
             0x32 => {
                 memory.write(self.registers.hl(), self.registers.a);
                 self.registers.set_hl(self.registers.hl() - 1);
@@ -528,6 +564,13 @@ impl Cpu {
                     elapsed_cycles: 8,
                 }
             } // LD (HL-),A
+            0x36 => {
+                memory.write(self.registers.hl(), memory.read(self.registers.pc + 1));
+                Finish {
+                    pc_increment: 2,
+                    elapsed_cycles: 12,
+                }
+            } // LD (HL),x
             0x3d => dec_reg8(&mut self.registers.a, &mut self.registers.f), // DEC A
             0x3e => ld_reg8_mem8(&mut self.registers.a, memory.read(self.registers.pc + 1)), // LD A,x
             0x53 => ld_reg8_reg8(&mut self.registers.d, self.registers.e), // LD D,E
@@ -595,6 +638,43 @@ impl Cpu {
                     elapsed_cycles: 12,
                 }
             } // LDH (ff00+x),A
+            0xe8 => {
+                // rwtodo: This is likely wrong.
+                let x: i32 = (memory.read(self.registers.pc + 1) as i8).into();
+
+                // rwtodo: Investigate what happens with this double XOR.
+                let sp32: i32 = self.registers.sp.into();
+                let xor_result = sp32 ^ x ^ (sp32 + x);
+
+                self.registers.f = 0;
+                if (xor_result & 0x10) != 0 {
+                    self.registers.f |= Registers::FLAG_HALFCARRY;
+                }
+                if (xor_result & 0x100) != 0 {
+                    self.registers.f |= Registers::FLAG_CARRY;
+                }
+
+                self.registers.sp = self.registers.sp.wrapping_add_signed(x.try_into().unwrap());
+
+                Finish {
+                    pc_increment: 2,
+                    elapsed_cycles: 16,
+                }
+            } // ADD SP,s
+            0xe9 => {
+                self.registers.pc = self.registers.hl();
+                Finish {
+                    pc_increment: 0,
+                    elapsed_cycles: 4,
+                }
+            } // JP (HL)
+            0xea => {
+                memory.write(memory.read_u16(self.registers.pc + 1), self.registers.a);
+                Finish {
+                    pc_increment: 3,
+                    elapsed_cycles: 16,
+                }
+            } // LD (x),A
             0xf0 => {
                 self.registers.a =
                     memory.read(0xff00 + u16::from(memory.read(self.registers.pc + 1)));
