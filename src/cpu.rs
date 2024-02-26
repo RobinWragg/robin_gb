@@ -21,7 +21,6 @@ fn print_instruction(pc: u16, memory: &mut Memory) {
         0x2c => println!("INC L"),
         0x32 => println!("LD (HL-),A"),
         0x3e => println!("LD A,{:#04x}", memory.read(pc + 1)),
-        0x53 => println!("LD D,E"),
         0x40 => println!("LD B,B"),
         0x41 => println!("LD B,C"),
         0x42 => println!("LD B,D"),
@@ -39,6 +38,7 @@ fn print_instruction(pc: u16, memory: &mut Memory) {
         0x50 => println!("LD D,B"),
         0x51 => println!("LD D,C"),
         0x52 => println!("LD D,D"),
+        0x53 => println!("LD D,E"),
         0x54 => println!("LD D,H"),
         0x55 => println!("LD D,L"),
         0x57 => println!("LD D,A"),
@@ -63,11 +63,12 @@ fn print_instruction(pc: u16, memory: &mut Memory) {
         0x6c => println!("LD L,H"),
         0x6d => println!("LD L,L"),
         0x6f => println!("LD L,A"),
-        0xc3 => println!("JP {:#06x}", memory.read_u16(pc + 1)),
         0xaf => println!("XOR A"),
+        0xc3 => println!("JP {:#06x}", memory.read_u16(pc + 1)),
         0xe0 => println!("LDH {:#06x},A", 0xff00 + u16::from(memory.read(pc + 1))),
-        0xf3 => println!("DI"),
         0xf0 => println!("LDH A,{:#06x}", 0xff00 + u16::from(memory.read(pc + 1))),
+        0xf3 => println!("DI"),
+        0xfe => println!("CP {:#04x}", memory.read(pc + 1)),
         _ => println!("op {:#04x} at address {:#06x}", opcode, pc),
     };
 }
@@ -149,20 +150,17 @@ mod instructions {
         pub elapsed_cycles: u8,
     }
 
-    // rwtodo: These probably take u8 arguments, so I might end up calling .into() a lot...
-    pub fn subtraction_produces_u8_full_carry(a: i16, b: i16) -> bool {
-        a - b < 0
+    pub fn subtraction_produces_u8_full_carry(a: u8, b: u8) -> bool {
+        i16::from(a) - i16::from(b) < 0
     }
 
-    // rwtodo: These probably take u8 arguments, so I might end up calling .into() a lot...
-    pub fn addition_produces_u8_full_carry(a: i16, b: i16) -> bool {
-        a + b > 0xff
+    pub fn addition_produces_u8_full_carry(a: u8, b: u8) -> bool {
+        i16::from(a) + i16::from(b) > 0xff
     }
 
-    // rwtodo: These probably take u8 arguments, so I might end up calling .into() a lot...
     pub fn subtraction_produces_u8_half_carry(
-        a: i16,
-        b: i16,
+        a: u8,
+        b: u8,
         register_f: u8,
         include_carry: bool,
     ) -> bool {
@@ -172,13 +170,12 @@ mod instructions {
             0
         };
 
-        (a & 0x0f) - (b & 0x0f) - optional_carry < 0
+        i16::from(a & 0x0f) - i16::from(b & 0x0f) - optional_carry < 0
     }
 
-    // rwtodo: These probably take u8 arguments, so I might end up calling .into() a lot...
     pub fn addition_produces_u8_half_carry(
-        a: i16,
-        b: i16,
+        a: u8,
+        b: u8,
         register_f: u8,
         include_carry: bool,
     ) -> bool {
@@ -188,11 +185,11 @@ mod instructions {
             0
         };
 
-        (a & 0x0f) + (b & 0x0f) + optional_carry > 0x0f
+        i16::from(a & 0x0f) + i16::from(b & 0x0f) + optional_carry > 0x0f
     }
 
     pub fn inc_u8(value_to_increment: &mut u8, register_f: &mut u8, elapsed_cycles: u8) -> Finish {
-        if addition_produces_u8_half_carry((*value_to_increment).into(), 1, *register_f, false) {
+        if addition_produces_u8_half_carry(*value_to_increment, 1, *register_f, false) {
             *register_f |= Registers::FLAG_HALFCARRY;
         } else {
             *register_f &= !Registers::FLAG_HALFCARRY;
@@ -370,7 +367,7 @@ mod instructions {
     }
 
     pub fn dec_reg8(register_to_dec: &mut u8, register_f: &mut u8) -> Finish {
-        if subtraction_produces_u8_half_carry(i16::from(*register_to_dec), 1, *register_f, false) {
+        if subtraction_produces_u8_half_carry(*register_to_dec, 1, *register_f, false) {
             *register_f |= Registers::FLAG_HALFCARRY;
         } else {
             *register_f &= !Registers::FLAG_HALFCARRY;
@@ -617,8 +614,8 @@ impl Cpu {
                 let byte_0 = memory.read(self.registers.pc + 1);
 
                 if subtraction_produces_u8_half_carry(
-                    self.registers.a.into(),
-                    byte_0.into(),
+                    self.registers.a,
+                    byte_0,
                     self.registers.f,
                     false,
                 ) {
@@ -627,7 +624,7 @@ impl Cpu {
                     self.registers.f &= !Registers::FLAG_HALFCARRY;
                 }
 
-                if subtraction_produces_u8_full_carry(self.registers.a.into(), byte_0.into()) {
+                if subtraction_produces_u8_full_carry(self.registers.a, byte_0) {
                     self.registers.f |= Registers::FLAG_CARRY;
                 } else {
                     self.registers.f &= !Registers::FLAG_CARRY;
