@@ -289,16 +289,20 @@ impl Renderer {
                 .try_into()
                 .expect("Screen line should be of size Lcd::WIDTH=160");
 
-            for pixel in screen_line.iter_mut() {
-                // The '& 0x03' below is to discard the SHADE_0_FLAG bit, which has already served its purpose in render_objects().
-                let mut pixel_i16 = i16::from(*pixel & 0x03);
-
-                // Flip the values and multiply to make white == 255.
-                pixel_i16 -= 3;
-                pixel_i16 *= -85;
-
-                *pixel = pixel_i16 as u8;
+            for pixel in screen_line {
+                assert_eq!(*pixel, 42); // It's time to display pixels!
             }
+
+            // for pixel in screen_line.iter_mut() {
+            //     // The '& 0x03' below is to discard the SHADE_0_FLAG bit, which has already served its purpose in render_objects().
+            //     let mut pixel_i16 = i16::from(*pixel & 0x03);
+
+            //     // Flip the values and multiply to make white == 255.
+            //     pixel_i16 -= 3;
+            //     pixel_i16 *= -85;
+
+            //     *pixel = pixel_i16 as u8;
+            // }
         }
     }
 }

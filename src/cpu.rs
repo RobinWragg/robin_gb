@@ -68,7 +68,7 @@ fn print_instruction(pc: u16, memory: &mut Memory) {
         0xe0 => println!("LDH {:#06x},A", 0xff00 + u16::from(memory.read(pc + 1))),
         0xf3 => println!("DI"),
         0xf0 => println!("LDH A,{:#06x}", 0xff00 + u16::from(memory.read(pc + 1))),
-        _ => panic!("op {:#04x} at address {:#06x}", opcode, pc),
+        _ => println!("op {:#04x} at address {:#06x}", opcode, pc),
     };
 }
 
@@ -150,17 +150,17 @@ mod instructions {
     }
 
     // rwtodo: These probably take u8 arguments, so I might end up calling .into() a lot...
-    fn subtraction_produces_u8_full_carry(a: i16, b: i16) -> bool {
+    pub fn subtraction_produces_u8_full_carry(a: i16, b: i16) -> bool {
         a - b < 0
     }
 
     // rwtodo: These probably take u8 arguments, so I might end up calling .into() a lot...
-    fn addition_produces_u8_full_carry(a: i16, b: i16) -> bool {
+    pub fn addition_produces_u8_full_carry(a: i16, b: i16) -> bool {
         a + b > 0xff
     }
 
     // rwtodo: These probably take u8 arguments, so I might end up calling .into() a lot...
-    fn subtraction_produces_u8_half_carry(
+    pub fn subtraction_produces_u8_half_carry(
         a: i16,
         b: i16,
         register_f: u8,
@@ -176,7 +176,7 @@ mod instructions {
     }
 
     // rwtodo: These probably take u8 arguments, so I might end up calling .into() a lot...
-    fn addition_produces_u8_half_carry(
+    pub fn addition_produces_u8_half_carry(
         a: i16,
         b: i16,
         register_f: u8,
@@ -613,6 +613,41 @@ impl Cpu {
                     elapsed_cycles: 4,
                 }
             } // DI
+            0xfe => {
+                let byte_0 = memory.read(self.registers.pc + 1);
+
+                if subtraction_produces_u8_half_carry(
+                    self.registers.a.into(),
+                    byte_0.into(),
+                    self.registers.f,
+                    false,
+                ) {
+                    self.registers.f |= Registers::FLAG_HALFCARRY;
+                } else {
+                    self.registers.f &= !Registers::FLAG_HALFCARRY;
+                }
+
+                if subtraction_produces_u8_full_carry(self.registers.a.into(), byte_0.into()) {
+                    self.registers.f |= Registers::FLAG_CARRY;
+                } else {
+                    self.registers.f &= !Registers::FLAG_CARRY;
+                }
+
+                // Set the add/sub flag high, indicating subtraction.
+                self.registers.f |= Registers::FLAG_SUBTRACTION;
+
+                let sub_result = self.registers.a.wrapping_sub(byte_0);
+                if sub_result == 0 {
+                    self.registers.f |= Registers::FLAG_ZERO;
+                } else {
+                    self.registers.f &= !Registers::FLAG_ZERO;
+                }
+
+                Finish {
+                    pc_increment: 2,
+                    elapsed_cycles: 8,
+                }
+            } // CP x
             _ => unreachable!(
                 "Unknown opcode {:#04x} at address {:#06x}\n",
                 opcode, self.registers.pc
