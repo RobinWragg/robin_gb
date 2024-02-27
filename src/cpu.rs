@@ -1,7 +1,7 @@
 use crate::address;
 use crate::interrupt;
-use crate::make_u16;
 use crate::Memory;
+use crate::{bit, make_u16};
 
 //rwtodo: I can probably do something nifty with Rust attributes to make the "instruction" functions more ergonomic.
 
@@ -119,6 +119,16 @@ impl Registers {
         assert_eq!(ret.e, 0xd8);
 
         ret
+    }
+
+    fn bc(&self) -> u16 {
+        make_u16(self.l, self.h)
+    }
+
+    fn set_bc(&mut self, new_bc: u16) {
+        let bytes = new_bc.to_le_bytes();
+        self.c = bytes[0];
+        self.b = bytes[1];
     }
 
     fn de(&self) -> u16 {
@@ -386,6 +396,31 @@ mod instructions {
             elapsed_cycles: 4,
         }
     }
+
+    pub fn add_reg16(src: u16, dst_register: &mut u16, register_f: &mut u8) -> Finish {
+        // Check for 16-bit full carry
+        if i32::from(*dst_register) + i32::from(src) > 0xffff {
+            *register_f |= Registers::FLAG_CARRY;
+        } else {
+            *register_f &= !Registers::FLAG_CARRY;
+        }
+
+        // Check for 16-bit half carry
+        if (*dst_register & 0x0fff) + (src & 0x0fff) > 0x0fff {
+            *register_f |= Registers::FLAG_HALFCARRY;
+        } else {
+            *register_f &= !Registers::FLAG_HALFCARRY;
+        }
+
+        *register_f &= !Registers::FLAG_SUBTRACTION;
+
+        *dst_register += src;
+
+        Finish {
+            pc_increment: 1,
+            elapsed_cycles: 8,
+        }
+    }
 }
 
 pub struct Cpu {
@@ -467,7 +502,7 @@ impl Cpu {
             return 4;
         }
 
-        print_instruction(self.registers.pc, memory);
+        // print_instruction(self.registers.pc, memory); rwtodo
 
         let opcode = memory.read(self.registers.pc);
 
@@ -477,7 +512,55 @@ impl Cpu {
             0x00 => nop(),                                                                   // NOP
             0x05 => dec_reg8(&mut self.registers.b, &mut self.registers.f), // DEC B
             0x06 => ld_reg8_mem8(&mut self.registers.b, memory.read(self.registers.pc + 1)), // LD B,x
-            0x0d => dec_reg8(&mut self.registers.c, &mut self.registers.f), // DEC C
+            0x07 => {
+                if self.registers.a & bit(7) != 0 {
+                    self.registers.f |= Registers::FLAG_CARRY;
+                    self.registers.a <<= 1;
+                    self.registers.a |= bit(0);
+                } else {
+                    self.registers.f &= !Registers::FLAG_CARRY;
+                    self.registers.a <<= 1;
+                    self.registers.a &= !bit(0);
+                }
+
+                self.registers.f &= !Registers::FLAG_ZERO;
+                self.registers.f &= !Registers::FLAG_SUBTRACTION;
+                self.registers.f &= !Registers::FLAG_HALFCARRY;
+                Finish {
+                    pc_increment: 1,
+                    elapsed_cycles: 4,
+                }
+            } // RLCA
+            0x08 => {
+                memory.write_u16(memory.read_u16(self.registers.pc + 1), self.registers.sp);
+                Finish {
+                    pc_increment: 3,
+                    elapsed_cycles: 20,
+                }
+            } // LD (xx),SP
+            0x09 => {
+                let mut hl = self.registers.hl();
+                let finish = add_reg16(self.registers.bc(), &mut hl, &mut self.registers.f);
+                self.registers.set_hl(hl);
+                finish
+            } // ADD HL,BC
+            0x0a => {
+                self.registers.a = memory.read(self.registers.bc());
+                Finish {
+                    pc_increment: 1,
+                    elapsed_cycles: 8,
+                }
+            } // LD A,(BC)
+            0x0b => {
+                let bc = self.registers.bc() - 1;
+                self.registers.set_bc(bc);
+                Finish {
+                    pc_increment: 1,
+                    elapsed_cycles: 8,
+                }
+            } // DEC BC
+            0x0c => inc_u8(&mut self.registers.c, &mut self.registers.f, 4), // INC C
+            0x0d => dec_reg8(&mut self.registers.c, &mut self.registers.f),  // DEC C
             0x0e => ld_reg8_mem8(&mut self.registers.c, memory.read(self.registers.pc + 1)), // LD C,x
             0x11 => {
                 self.registers

@@ -264,7 +264,7 @@ impl Memory {
         }
     }
 
-    fn write_u16(&mut self, address: u16, value: u16) {
+    pub fn write_u16(&mut self, address: u16, value: u16) {
         let bytes = value.to_le_bytes();
         self.write(address, bytes[0]);
         self.write(address + 1, bytes[1]);

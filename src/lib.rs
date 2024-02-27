@@ -15,6 +15,10 @@ fn make_u16(lower_nibble: u8, upper_nibble: u8) -> u16 {
     lower_nibble | (upper_nibble << 8)
 }
 
+fn bit(index: u8) -> u8 {
+    0x01 << index
+}
+
 // rwtodo: interrupt responsibility is shared here and in the Cpu impl, which is icky.
 mod interrupt {
     use crate::address;
