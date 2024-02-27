@@ -262,15 +262,13 @@ mod instructions {
         }
     }
 
-    fn and(
+    pub fn and(
         and_input: u8,
         register_a: &mut u8,
         register_f: &mut u8,
         pc_increment: i16,
         elapsed_cycles: u8,
     ) -> Finish {
-        // rwtodo: If pc_increment is always 1, remove it as from the param list.
-
         *register_a &= and_input;
 
         if *register_a == 0 {
@@ -638,6 +636,34 @@ impl Cpu {
                     elapsed_cycles: 12,
                 }
             } // LDH (ff00+x),A
+            0xe1 => {
+                let popped_value = self.stack_pop(memory);
+                self.registers.set_hl(popped_value);
+                Finish {
+                    pc_increment: 1,
+                    elapsed_cycles: 12,
+                }
+            } // POP HL
+            0xe2 => {
+                memory.write(0xff00 + u16::from(self.registers.c), self.registers.a);
+                Finish {
+                    pc_increment: 1,
+                    elapsed_cycles: 8,
+                }
+            } // LD (ff00+C),A
+            0xe3 => unreachable!("Invalid opcode"),
+            0xe4 => unreachable!("Invalid opcode"),
+            0xe5 => {
+                self.stack_push(self.registers.hl(), memory);
+                Finish {
+                    pc_increment: 1,
+                    elapsed_cycles: 16,
+                }
+            } // PUSH HL
+            0xe6 => {
+                let x = memory.read(self.registers.pc + 1);
+                and(x, &mut self.registers.a, &mut self.registers.f, 2, 8)
+            } // AND x
             0xe8 => {
                 // rwtodo: This is likely wrong.
                 let x: i32 = (memory.read(self.registers.pc + 1) as i8).into();
