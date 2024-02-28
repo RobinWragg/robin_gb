@@ -92,7 +92,7 @@ fn print_instruction(pc: u16, memory: &mut Memory) {
 
 type CycleCount = u8;
 
-struct Registers {
+pub struct Registers {
     a: u8,
     b: u8,
     c: u8,
@@ -241,7 +241,30 @@ impl Cpu {
         use instructions::*;
 
         let finish: Finish = match opcode {
-            0x00 => nop(),                                                                   // NOP
+            0x00 => nop(), // NOP
+            0x01 => {
+                self.registers
+                    .set_bc(memory.read_u16(self.registers.pc + 1));
+                Finish {
+                    pc_increment: 3,
+                    elapsed_cycles: 12,
+                }
+            } // LD BC,xx
+            0x02 => {
+                memory.write(self.registers.bc(), self.registers.a);
+                Finish {
+                    pc_increment: 1,
+                    elapsed_cycles: 8,
+                }
+            } // LD (BC),A
+            0x03 => {
+                self.registers.set_bc(self.registers.bc() + 1);
+                Finish {
+                    pc_increment: 1,
+                    elapsed_cycles: 8,
+                }
+            } // INC BC
+            0x04 => inc_u8(&mut self.registers.b, &mut self.registers.f, 4), // INC B
             0x05 => dec_reg8(&mut self.registers.b, &mut self.registers.f), // DEC B
             0x06 => ld_reg8_mem8(&mut self.registers.b, memory.read(self.registers.pc + 1)), // LD B,x
             0x07 => {
@@ -428,12 +451,135 @@ impl Cpu {
             0x6c => ld_reg8_reg8(&mut self.registers.l, self.registers.h), // LD L,H
             0x6d => nop(),                                                 // LD L,L
             0x6f => ld_reg8_reg8(&mut self.registers.l, self.registers.a), // LD L,A
-            0xaf => xor(
-                self.registers.a,
-                &mut self.registers.a,
-                &mut self.registers.f,
-                4,
-            ), // XOR A
+            0x70 => {
+                memory.write(self.registers.hl(), self.registers.b);
+                Finish {
+                    pc_increment: 1,
+                    elapsed_cycles: 8,
+                }
+            } // LD (HL),B
+            0x71 => {
+                memory.write(self.registers.hl(), self.registers.c);
+                Finish {
+                    pc_increment: 1,
+                    elapsed_cycles: 8,
+                }
+            } // LD (HL),C
+            0x72 => {
+                memory.write(self.registers.hl(), self.registers.d);
+                Finish {
+                    pc_increment: 1,
+                    elapsed_cycles: 8,
+                }
+            } // LD (HL),D
+            0x73 => {
+                memory.write(self.registers.hl(), self.registers.e);
+                Finish {
+                    pc_increment: 1,
+                    elapsed_cycles: 8,
+                }
+            } // LD (HL),E
+            0x74 => {
+                memory.write(self.registers.hl(), self.registers.h);
+                Finish {
+                    pc_increment: 1,
+                    elapsed_cycles: 8,
+                }
+            } // LD (HL),H
+            0x75 => {
+                memory.write(self.registers.hl(), self.registers.l);
+                Finish {
+                    pc_increment: 1,
+                    elapsed_cycles: 8,
+                }
+            } // LD (HL),L
+            0x77 => {
+                memory.write(self.registers.hl(), self.registers.a);
+                Finish {
+                    pc_increment: 1,
+                    elapsed_cycles: 8,
+                }
+            } // LD (HL),A
+            0x78 => {
+                self.registers.a = self.registers.b;
+                Finish {
+                    pc_increment: 1,
+                    elapsed_cycles: 4,
+                }
+            } // LD A,B
+            0x79 => {
+                self.registers.a = self.registers.c;
+                Finish {
+                    pc_increment: 1,
+                    elapsed_cycles: 4,
+                }
+            } // LD A,C
+            0x7a => {
+                self.registers.a = self.registers.d;
+                Finish {
+                    pc_increment: 1,
+                    elapsed_cycles: 4,
+                }
+            } // LD A,D
+            0x7b => {
+                self.registers.a = self.registers.e;
+                Finish {
+                    pc_increment: 1,
+                    elapsed_cycles: 4,
+                }
+            } // LD A,E
+            0x7c => {
+                self.registers.a = self.registers.h;
+                Finish {
+                    pc_increment: 1,
+                    elapsed_cycles: 4,
+                }
+            } // LD A,H
+            0x7d => {
+                self.registers.a = self.registers.l;
+                Finish {
+                    pc_increment: 1,
+                    elapsed_cycles: 4,
+                }
+            } // LD A,L
+            0x7e => {
+                self.registers.a = memory.read(self.registers.hl());
+                Finish {
+                    pc_increment: 1,
+                    elapsed_cycles: 8,
+                }
+            } // LD A,(HL)
+            0x7f => {
+                self.registers.a = self.registers.a;
+                Finish {
+                    pc_increment: 1,
+                    elapsed_cycles: 4,
+                }
+            } // LD A,A
+            0x80 => add_u8(self.registers.b, &mut self.registers, 1, 4),   // ADD A,B
+            0x81 => add_u8(self.registers.c, &mut self.registers, 1, 4),   // ADD A,C
+            0x82 => add_u8(self.registers.d, &mut self.registers, 1, 4),   // ADD A,D
+            0x83 => add_u8(self.registers.e, &mut self.registers, 1, 4),   // ADD A,E
+            0x84 => add_u8(self.registers.h, &mut self.registers, 1, 4),   // ADD A,H
+            0x85 => add_u8(self.registers.l, &mut self.registers, 1, 4),   // ADD A,L
+            0x86 => add_u8(memory.read(self.registers.hl()), &mut self.registers, 1, 8), // ADD A,(HL)
+            0x87 => add_u8(self.registers.a, &mut self.registers, 1, 4),                 // ADD A,A
+            0xa0 => and(self.registers.b, &mut self.registers, 1, 4), // AND B
+            0xa1 => and(self.registers.c, &mut self.registers, 1, 4), // AND C
+            0xa2 => and(self.registers.d, &mut self.registers, 1, 4), // AND D
+            0xa3 => and(self.registers.e, &mut self.registers, 1, 4), // AND E
+            0xa4 => and(self.registers.h, &mut self.registers, 1, 4), // AND H
+            0xa5 => and(self.registers.l, &mut self.registers, 1, 4), // AND L
+            0xa6 => and(memory.read(self.registers.hl()), &mut self.registers, 1, 8), // AND (HL)
+            0xa7 => and(self.registers.a, &mut self.registers, 1, 4), // AND A
+            0xa8 => xor(self.registers.b, &mut self.registers, 4),    // XOR B
+            0xa9 => xor(self.registers.c, &mut self.registers, 4),    // XOR C
+            0xaa => xor(self.registers.d, &mut self.registers, 4),    // XOR D
+            0xab => xor(self.registers.e, &mut self.registers, 4),    // XOR E
+            0xac => xor(self.registers.h, &mut self.registers, 4),    // XOR H
+            0xad => xor(self.registers.l, &mut self.registers, 4),    // XOR L
+            0xae => xor(memory.read(self.registers.hl()), &mut self.registers, 8), // XOR (HL)
+            0xaf => xor(self.registers.a, &mut self.registers, 4),    // XOR A
             0xc3 => {
                 self.registers.pc = memory.read_u16(self.registers.pc + 1);
                 Finish {
@@ -478,7 +624,7 @@ impl Cpu {
             } // PUSH HL
             0xe6 => {
                 let x = memory.read(self.registers.pc + 1);
-                and(x, &mut self.registers.a, &mut self.registers.f, 2, 8)
+                and(x, &mut self.registers, 2, 8)
             } // AND x
             0xe8 => {
                 // rwtodo: This is likely wrong.

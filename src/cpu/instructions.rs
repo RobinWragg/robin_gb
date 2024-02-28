@@ -61,18 +61,18 @@ pub fn inc_u8(value_to_increment: &mut u8, register_f: &mut u8, elapsed_cycles: 
     }
 }
 
-pub fn xor(xor_input: u8, register_a: &mut u8, register_f: &mut u8, elapsed_cycles: u8) -> Finish {
-    *register_a ^= xor_input;
+pub fn xor(xor_input: u8, registers: &mut Registers, elapsed_cycles: u8) -> Finish {
+    registers.a ^= xor_input;
 
-    if *register_a == 0 {
-        *register_f |= Registers::FLAG_ZERO;
+    if registers.a == 0 {
+        registers.f |= Registers::FLAG_ZERO;
     } else {
-        *register_f &= !Registers::FLAG_ZERO;
+        registers.f &= !Registers::FLAG_ZERO;
     }
 
-    *register_f &= !Registers::FLAG_SUBTRACTION;
-    *register_f &= !Registers::FLAG_HALFCARRY;
-    *register_f &= !Registers::FLAG_CARRY;
+    registers.f &= !Registers::FLAG_SUBTRACTION;
+    registers.f &= !Registers::FLAG_HALFCARRY;
+    registers.f &= !Registers::FLAG_CARRY;
 
     Finish {
         pc_increment: 1,
@@ -109,22 +109,21 @@ fn or(
 
 pub fn and(
     and_input: u8,
-    register_a: &mut u8,
-    register_f: &mut u8,
+    registers: &mut Registers,
     pc_increment: i16,
     elapsed_cycles: u8,
 ) -> Finish {
-    *register_a &= and_input;
+    registers.a &= and_input;
 
-    if *register_a == 0 {
-        *register_f |= Registers::FLAG_ZERO;
+    if registers.a == 0 {
+        registers.f |= Registers::FLAG_ZERO;
     } else {
-        *register_f &= !Registers::FLAG_ZERO;
+        registers.f &= !Registers::FLAG_ZERO;
     }
 
-    *register_f &= !Registers::FLAG_SUBTRACTION;
-    *register_f |= Registers::FLAG_HALFCARRY;
-    *register_f &= !Registers::FLAG_CARRY;
+    registers.f &= !Registers::FLAG_SUBTRACTION;
+    registers.f |= Registers::FLAG_HALFCARRY;
+    registers.f &= !Registers::FLAG_CARRY;
 
     Finish {
         pc_increment,
@@ -271,5 +270,39 @@ pub fn call_condition(condition: bool, pc: &mut u16, sp: &mut u16, memory: &mut 
             pc_increment: 3,
             elapsed_cycles: 12,
         }
+    }
+}
+
+pub fn add_u8(
+    add_src: u8,
+    registers: &mut Registers,
+    pc_increment: i16,
+    elapsed_cycles: u8,
+) -> Finish {
+    if addition_produces_u8_half_carry(registers.a, add_src, registers.f, false) {
+        registers.f |= Registers::FLAG_HALFCARRY;
+    } else {
+        registers.f &= !Registers::FLAG_HALFCARRY;
+    }
+
+    if addition_produces_u8_full_carry(registers.a, add_src) {
+        registers.f |= Registers::FLAG_CARRY;
+    } else {
+        registers.f &= !Registers::FLAG_CARRY;
+    }
+
+    registers.a += add_src;
+
+    if registers.a == 0 {
+        registers.f |= Registers::FLAG_ZERO;
+    } else {
+        registers.f &= !Registers::FLAG_ZERO;
+    }
+
+    registers.f &= !Registers::FLAG_SUBTRACTION;
+
+    Finish {
+        pc_increment,
+        elapsed_cycles,
     }
 }
