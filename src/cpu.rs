@@ -734,6 +734,33 @@ impl Cpu {
                 memory,
             ), // CALL Z,xx
             0xcd => call_condition(true, &mut self.registers, memory), // CALL xx
+            0xce => {
+                let x = memory.read(self.registers.pc + 1);
+                adc(x, &mut self.registers, 2, 8)
+            } // ADC A,x
+            0xcf => rst(0x08, &mut self.registers, memory),            // RST 08h
+            0xd0 => {
+                if self.registers.f & Registers::FLAG_CARRY == 0 {
+                    self.registers.pc = stack_pop(&mut self.registers.sp, memory);
+                    Finish {
+                        pc_increment: 0,
+                        elapsed_cycles: 20,
+                    }
+                } else {
+                    Finish {
+                        pc_increment: 1,
+                        elapsed_cycles: 8,
+                    }
+                }
+            } // RET NC
+            0xd1 => {
+                let popped_value = stack_pop(&mut self.registers.sp, memory);
+                self.registers.set_de(popped_value);
+                Finish {
+                    pc_increment: 1,
+                    elapsed_cycles: 12,
+                }
+            }
             0xe0 => {
                 memory.write(
                     0xff00 + u16::from(memory.read(self.registers.pc + 1)),
