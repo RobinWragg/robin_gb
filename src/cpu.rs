@@ -317,7 +317,7 @@ impl Cpu {
                 }
             } // LD A,(BC)
             0x0b => {
-                let bc = self.registers.bc() - 1;
+                let bc = self.registers.bc().wrapping_sub(1);
                 self.registers.set_bc(bc);
                 Finish {
                     pc_increment: 1,
@@ -837,6 +837,53 @@ impl Cpu {
                 or(x, &mut self.registers, 2, 8)
             } // OR x
             0xf7 => rst(0x30, &mut self.registers, memory), // RST 30h
+            0xf8 => {
+                // rwtodo: This is likely wrong.
+                let x: i32 = (memory.read(self.registers.pc + 1) as i8).into();
+
+                // rwtodo: Investigate what happens with this double XOR.
+                let sp32: i32 = self.registers.sp.into();
+                let xor_result = sp32 ^ x ^ (sp32 + x);
+
+                self.registers.f = 0;
+                if (xor_result & 0x10) != 0 {
+                    self.registers.f |= Registers::FLAG_HALFCARRY;
+                }
+                if (xor_result & 0x100) != 0 {
+                    self.registers.f |= Registers::FLAG_CARRY;
+                }
+
+                self.registers.set_hl((sp32 + x) as u16);
+
+                Finish {
+                    pc_increment: 2,
+                    elapsed_cycles: 12,
+                }
+            } // LDHL SP,s
+            0xf9 => {
+                self.registers.sp = self.registers.hl();
+                Finish {
+                    pc_increment: 1,
+                    elapsed_cycles: 8,
+                }
+            } // LD SP,HL
+            0xfa => {
+                let address = u16::from(memory.read_u16(self.registers.pc + 1));
+                self.registers.a = memory.read(address);
+                Finish {
+                    pc_increment: 3,
+                    elapsed_cycles: 16,
+                }
+            } // LD A,(xx)
+            0xfb => {
+                self.registers.ime = true;
+                Finish {
+                    pc_increment: 1,
+                    elapsed_cycles: 4,
+                }
+            } // IE
+            0xfc => unreachable!("Invalid opcode"),
+            0xfd => unreachable!("Invalid opcode"),
             0xfe => {
                 let byte_0 = memory.read(self.registers.pc + 1);
 

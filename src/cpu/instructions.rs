@@ -247,7 +247,7 @@ pub fn add_reg16(src: u16, dst_register: &mut u16, register_f: &mut u8) -> Finis
 
     *register_f &= !Registers::FLAG_SUBTRACTION;
 
-    *dst_register += src;
+    *dst_register = dst_register.wrapping_add(src);
 
     Finish {
         pc_increment: 1,
@@ -290,7 +290,7 @@ pub fn add_u8(
         registers.f &= !Registers::FLAG_CARRY;
     }
 
-    registers.a += add_src;
+    registers.a = registers.a.wrapping_add(add_src);
 
     if registers.a == 0 {
         registers.f |= Registers::FLAG_ZERO;
