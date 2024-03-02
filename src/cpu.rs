@@ -620,6 +620,42 @@ impl Cpu {
             0xbd => cp(self.registers.l, &mut self.registers, 1, 4),                  // CP L
             0xbe => cp(memory.read(self.registers.hl()), &mut self.registers, 1, 8),  // CP (HL)
             0xbf => cp(self.registers.a, &mut self.registers, 1, 4),                  // RES 7,A
+            0xc0 => {
+                if self.registers.f & Registers::FLAG_ZERO != 0 {
+                    Finish {
+                        pc_increment: 1,
+                        elapsed_cycles: 8,
+                    }
+                } else {
+                    self.registers.pc = stack_pop(&mut self.registers.sp, memory);
+                    Finish {
+                        pc_increment: 0,
+                        elapsed_cycles: 20,
+                    }
+                }
+            } // RET NZ
+            0xc1 => {
+                let new_bc = stack_pop(&mut self.registers.sp, memory);
+                self.registers.set_bc(new_bc);
+                Finish {
+                    pc_increment: 1,
+                    elapsed_cycles: 12,
+                }
+            } // POP BC
+            0xc2 => {
+                if self.registers.f & Registers::FLAG_ZERO == 0 {
+                    self.registers.pc = memory.read_u16(self.registers.pc + 1);
+                    Finish {
+                        pc_increment: 0,
+                        elapsed_cycles: 16,
+                    }
+                } else {
+                    Finish {
+                        pc_increment: 3,
+                        elapsed_cycles: 12,
+                    }
+                }
+            } // JP NZ,xx
             0xc3 => {
                 self.registers.pc = memory.read_u16(self.registers.pc + 1);
                 Finish {
