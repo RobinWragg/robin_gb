@@ -138,8 +138,18 @@ impl Registers {
         ret
     }
 
+    fn af(&self) -> u16 {
+        make_u16(self.f, self.a)
+    }
+
+    fn set_af(&mut self, new_af: u16) {
+        let bytes = new_af.to_le_bytes();
+        self.f = bytes[0];
+        self.a = bytes[1];
+    }
+
     fn bc(&self) -> u16 {
-        make_u16(self.l, self.h)
+        make_u16(self.c, self.d)
     }
 
     fn set_bc(&mut self, new_bc: u16) {
@@ -663,7 +673,67 @@ impl Cpu {
                     elapsed_cycles: 16,
                 }
             } // JP xx
-            0xcd => call_condition(true, &mut self.registers.pc, &mut self.registers.sp, memory), // CALL xx
+            0xc4 => call_condition(
+                self.registers.f & Registers::FLAG_ZERO != 0,
+                &mut self.registers,
+                memory,
+            ), // CALL NZ,xx
+            0xc5 => {
+                stack_push(self.registers.bc(), &mut self.registers.sp, memory);
+                Finish {
+                    pc_increment: 1,
+                    elapsed_cycles: 16,
+                }
+            } // PUSH BC
+            0xc6 => add_u8(
+                memory.read(self.registers.pc + 1),
+                &mut self.registers,
+                2,
+                8,
+            ), // ADD A,x
+            0xc7 => rst(0x00, &mut self.registers, memory),                           // RST 00h
+            0xc8 => {
+                if self.registers.f & Registers::FLAG_ZERO != 0 {
+                    self.registers.pc = stack_pop(&mut self.registers.sp, memory);
+                    Finish {
+                        pc_increment: 0,
+                        elapsed_cycles: 20,
+                    }
+                } else {
+                    Finish {
+                        pc_increment: 1,
+                        elapsed_cycles: 8,
+                    }
+                }
+            } // RET Z
+            0xc9 => {
+                self.registers.pc = stack_pop(&mut self.registers.sp, memory);
+                Finish {
+                    pc_increment: 0,
+                    elapsed_cycles: 16,
+                }
+            } // RET
+            0xca => {
+                if self.registers.f & Registers::FLAG_ZERO != 0 {
+                    self.registers.pc = memory.read_u16(self.registers.pc + 1);
+                    Finish {
+                        pc_increment: 0,
+                        elapsed_cycles: 16,
+                    }
+                } else {
+                    Finish {
+                        pc_increment: 3,
+                        elapsed_cycles: 12,
+                    }
+                }
+            } // JP Z,xx
+            0xcb => unimplemented!("No 0xcb instructions yet"),
+            0xcc => call_condition(
+                self.registers.f & Registers::FLAG_ZERO != 0,
+                &mut self.registers,
+                memory,
+            ), // CALL Z,xx
+            0xcd => call_condition(true, &mut self.registers, memory), // CALL xx
             0xe0 => {
                 memory.write(
                     0xff00 + u16::from(memory.read(self.registers.pc + 1)),
@@ -754,6 +824,19 @@ impl Cpu {
                     elapsed_cycles: 4,
                 }
             } // DI
+            0xf4 => unreachable!("Invalid opcode"),
+            0xf5 => {
+                stack_push(self.registers.af(), &mut self.registers.sp, memory);
+                Finish {
+                    pc_increment: 1,
+                    elapsed_cycles: 16,
+                }
+            } // PUSH AF
+            0xf6 => {
+                let x = memory.read(self.registers.pc + 1);
+                or(x, &mut self.registers, 2, 8)
+            } // OR x
+            0xf7 => rst(0x30, &mut self.registers, memory), // RST 30h
             0xfe => {
                 let byte_0 = memory.read(self.registers.pc + 1);
 

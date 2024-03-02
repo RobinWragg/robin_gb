@@ -255,11 +255,11 @@ pub fn add_reg16(src: u16, dst_register: &mut u16, register_f: &mut u8) -> Finis
     }
 }
 
-pub fn call_condition(condition: bool, pc: &mut u16, sp: &mut u16, memory: &mut Memory) -> Finish {
+pub fn call_condition(condition: bool, registers: &mut Registers, memory: &mut Memory) -> Finish {
     if condition {
-        stack_push(*pc + 3, sp, memory);
+        stack_push(registers.pc + 3, &mut registers.sp, memory);
 
-        *pc = memory.read_u16(*pc + 1);
+        registers.pc = memory.read_u16(registers.pc + 1);
         Finish {
             pc_increment: 0,
             elapsed_cycles: 24,
@@ -452,5 +452,14 @@ pub fn cp(
     Finish {
         pc_increment,
         elapsed_cycles,
+    }
+}
+
+pub fn rst(address_lower_byte: u8, registers: &mut Registers, memory: &mut Memory) -> Finish {
+    stack_push(registers.pc + 1, &mut registers.sp, memory);
+    registers.pc = address_lower_byte.into();
+    Finish {
+        pc_increment: 0,
+        elapsed_cycles: 16,
     }
 }
