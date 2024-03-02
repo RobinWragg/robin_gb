@@ -146,6 +146,18 @@ pub struct GameBoy {
 }
 
 impl GameBoy {
+    pub fn new(rom_file_data: &[u8]) -> GameBoy {
+        let mut memory = Memory::new(&rom_file_data);
+        let timer = Timer::new(&mut memory);
+
+        GameBoy {
+            lcd: Lcd::new(),
+            memory,
+            cpu: Cpu::new(),
+            timer,
+        }
+    }
+
     // rwtodo: returns true if not vblank. not a fan. enum?
     fn emulate_next_lcd_line(&mut self) -> bool {
         let previous_lcd_ly = *self.memory.direct_access(address::LCD_LY);
@@ -186,16 +198,4 @@ impl GameBoy {
     pub fn set_button(&mut self, button: &Button, is_down: bool) {
         // rwtodo
     }
-}
-
-pub fn load_rom_file(rom_file_data: &[u8]) -> Result<GameBoy, std::io::Error> {
-    let mut memory = Memory::new(&rom_file_data);
-    let timer = Timer::new(&mut memory);
-
-    Ok(GameBoy {
-        lcd: Lcd::new(),
-        memory,
-        cpu: Cpu::new(),
-        timer,
-    })
 }

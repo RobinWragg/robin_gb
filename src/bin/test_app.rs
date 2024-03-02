@@ -12,7 +12,7 @@ use winit::window::WindowBuilder;
 fn main() {
     println!("Hello, world!");
     let rom_file_data = fs::read("roms/Tetris.gb").unwrap();
-    let mut gb = robin_gb::load_rom_file(&rom_file_data[..]).unwrap();
+    let mut gb = robin_gb::GameBoy::new(&rom_file_data[..]);
 
     let event_loop = EventLoop::new().unwrap();
     event_loop.set_control_flow(ControlFlow::Poll);
