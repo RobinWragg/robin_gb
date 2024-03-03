@@ -296,6 +296,65 @@ impl Cpu {
             } // LD HL,xx
             0x25 => dec_reg8(&mut self.registers.h, &mut self.registers.f), // DEC H
             0x26 => ld_reg8_mem8(&mut self.registers.h, memory.read(self.registers.pc + 1)), // LD H,x
+            0x27 => {
+                let mut new_a: u16 = self.registers.a.into();
+
+                if self.registers.f & Registers::FLAG_SUBTRACTION == 0 {
+                    if (self.registers.f & Registers::FLAG_HALFCARRY != 0) || (new_a & 0x0f) > 0x09
+                    {
+                        new_a += 0x06;
+                    }
+                    if (self.registers.f & Registers::FLAG_CARRY != 0) || new_a > 0x9f {
+                        new_a += 0x60;
+                    }
+                } else {
+                    if self.registers.f & Registers::FLAG_HALFCARRY != 0 {
+                        new_a -= 0x06;
+                        if self.registers.f & Registers::FLAG_CARRY == 0 {
+                            new_a &= 0xff;
+                        }
+                    }
+
+                    if self.registers.f & Registers::FLAG_CARRY != 0 {
+                        new_a -= 0x60;
+                    }
+                }
+
+                self.registers.a = new_a as u8;
+
+                self.registers.f &= !(Registers::FLAG_HALFCARRY | Registers::FLAG_ZERO);
+                if new_a & 0x100 != 0 {
+                    self.registers.f |= Registers::FLAG_CARRY;
+                }
+                if self.registers.a == 0 {
+                    self.registers.f |= Registers::FLAG_ZERO;
+                }
+
+                Finish {
+                    pc_increment: 1,
+                    elapsed_cycles: 4,
+                }
+            } // DAA
+            0x28 => {
+                if self.registers.f & Registers::FLAG_ZERO != 0 {
+                    let x = memory.read(self.registers.pc + 1) as i8;
+                    Finish {
+                        pc_increment: (2 + x).into(),
+                        elapsed_cycles: 12,
+                    }
+                } else {
+                    Finish {
+                        pc_increment: 2,
+                        elapsed_cycles: 8,
+                    }
+                }
+            } // JR Z,s
+            0x29 => {
+                let mut hl = self.registers.hl();
+                let finish = add_reg16(self.registers.hl(), &mut hl, &mut self.registers.f);
+                self.registers.set_hl(hl);
+                finish
+            } // ADD HL,HL
             0x2a => {
                 self.registers.a = memory.read(self.registers.hl());
                 self.registers.set_hl(self.registers.hl() + 1);
@@ -608,7 +667,7 @@ impl Cpu {
                 }
             } // JP xx
             0xc4 => call_condition(
-                self.registers.f & Registers::FLAG_ZERO != 0,
+                self.registers.f & Registers::FLAG_ZERO == 0,
                 &mut self.registers,
                 memory,
             ), // CALL NZ,xx
@@ -695,6 +754,34 @@ impl Cpu {
                     elapsed_cycles: 12,
                 }
             }
+            0xd2 => {
+                if self.registers.f & Registers::FLAG_CARRY == 0 {
+                    self.registers.pc = memory.read_u16(self.registers.pc + 1);
+                    Finish {
+                        pc_increment: 0,
+                        elapsed_cycles: 16,
+                    }
+                } else {
+                    Finish {
+                        pc_increment: 3,
+                        elapsed_cycles: 12,
+                    }
+                }
+            } // JP NC,xx
+            0xd3 => unreachable!("Invalid opcode"),
+
+            0xd4 => call_condition(
+                self.registers.f & Registers::FLAG_CARRY == 0,
+                &mut self.registers,
+                memory,
+            ), // CALL NC,xx
+            0xd5 => {
+                stack_push(self.registers.de(), &mut self.registers.sp, memory);
+                Finish {
+                    pc_increment: 1,
+                    elapsed_cycles: 16,
+                }
+            } // PUSH DE
             0xe0 => {
                 memory.write(
                     0xff00 + u16::from(memory.read(self.registers.pc + 1)),
