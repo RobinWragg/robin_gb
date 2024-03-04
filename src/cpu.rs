@@ -782,6 +782,10 @@ impl Cpu {
                     elapsed_cycles: 16,
                 }
             } // PUSH DE
+            0xd6 => {
+                let x = memory.read(self.registers.pc + 1);
+                sub(x, &mut self.registers, 2, 8)
+            } // SUB x
             0xe0 => {
                 memory.write(
                     0xff00 + u16::from(memory.read(self.registers.pc + 1)),
