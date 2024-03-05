@@ -7,7 +7,7 @@
 
 ## Current Status & Goals
 
-205 of the 245 core instructions have been implemented. The main subsystems are up and running, except the foreground tile rendering.
+214 of the 245 core instructions have been implemented. The main subsystems are up and running, except the foreground tile rendering.
 
 Once actual gameplay is possible, the short-term goal is to build a test harness that will run many instances of the emulator simultaneously to catch bugs and incompatibilities.
 

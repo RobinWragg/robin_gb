@@ -412,7 +412,6 @@ impl Cpu {
             } // LD (HL),x
             0x3d => dec_reg8(&mut self.registers.a, &mut self.registers.f), // DEC A
             0x3e => ld_reg8_mem8(&mut self.registers.a, memory.read(self.registers.pc + 1)), // LD A,x
-            0x53 => ld_reg8_reg8(&mut self.registers.d, self.registers.e), // LD D,E
             0x40 => nop(),                                                 // LD B,B
             0x41 => ld_reg8_reg8(&mut self.registers.b, self.registers.c), // LD B,C
             0x42 => ld_reg8_reg8(&mut self.registers.b, self.registers.d), // LD B,D
@@ -430,6 +429,7 @@ impl Cpu {
             0x50 => ld_reg8_reg8(&mut self.registers.d, self.registers.b), // LD D,B
             0x51 => ld_reg8_reg8(&mut self.registers.d, self.registers.c), // LD D,C
             0x52 => nop(),                                                 // LD D,D
+            0x53 => ld_reg8_reg8(&mut self.registers.d, self.registers.e), // LD D,E
             0x54 => ld_reg8_reg8(&mut self.registers.d, self.registers.h), // LD D,H
             0x55 => ld_reg8_reg8(&mut self.registers.d, self.registers.l), // LD D,L
             0x57 => ld_reg8_reg8(&mut self.registers.d, self.registers.a), // LD D,A
@@ -786,6 +786,55 @@ impl Cpu {
                 let x = memory.read(self.registers.pc + 1);
                 sub(x, &mut self.registers, 2, 8)
             } // SUB x
+            0xd7 => rst(0x10, &mut self.registers, memory), // RST 10h
+            0xd8 => {
+                if self.registers.f & Registers::FLAG_CARRY != 0 {
+                    self.registers.pc = stack_pop(&mut self.registers.sp, memory);
+                    Finish {
+                        pc_increment: 0,
+                        elapsed_cycles: 20,
+                    }
+                } else {
+                    Finish {
+                        pc_increment: 1,
+                        elapsed_cycles: 8,
+                    }
+                }
+            } // RET C
+            0xd9 => {
+                self.registers.pc = stack_pop(&mut self.registers.sp, memory);
+                self.registers.ime = true;
+                Finish {
+                    pc_increment: 0,
+                    elapsed_cycles: 16,
+                }
+            } // RETI
+            0xda => {
+                if self.registers.f & Registers::FLAG_CARRY != 0 {
+                    self.registers.pc = memory.read_u16(self.registers.pc + 1);
+                    Finish {
+                        pc_increment: 0,
+                        elapsed_cycles: 16,
+                    }
+                } else {
+                    Finish {
+                        pc_increment: 3,
+                        elapsed_cycles: 12,
+                    }
+                }
+            } // JP C,xx
+            0xdb => unreachable!("Invalid opcode"),
+            0xdc => call_condition(
+                self.registers.f & Registers::FLAG_CARRY != 0,
+                &mut self.registers,
+                memory,
+            ), // CALL C,xx
+            0xdd => unreachable!("Invalid opcode"),
+            0xde => {
+                let x = memory.read(self.registers.pc + 1);
+                sbc(x, &mut self.registers, 2, 8)
+            } // SBC A,x
+            0xdf => rst(0x18, &mut self.registers, memory), // RST 18h
             0xe0 => {
                 memory.write(
                     0xff00 + u16::from(memory.read(self.registers.pc + 1)),
