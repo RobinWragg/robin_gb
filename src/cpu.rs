@@ -276,13 +276,13 @@ impl Cpu {
             0x20 => {
                 if (self.registers.f & Registers::FLAG_ZERO) != 0 {
                     Finish {
-                        pc_increment: 2,
-                        elapsed_cycles: 8,
+                        pc_increment: 2 + i16::from(memory.read(self.registers.pc + 1) as i8),
+                        elapsed_cycles: 12,
                     }
                 } else {
                     Finish {
-                        pc_increment: 2 + i16::from(memory.read(self.registers.pc + 1) as i8),
-                        elapsed_cycles: 12,
+                        pc_increment: 2,
+                        elapsed_cycles: 8,
                     }
                 }
             } // JR NZ,s
@@ -336,7 +336,7 @@ impl Cpu {
                 }
             } // DAA
             0x28 => {
-                if self.registers.f & Registers::FLAG_ZERO != 0 {
+                if self.registers.f & Registers::FLAG_ZERO == 0 {
                     let x = memory.read(self.registers.pc + 1) as i8;
                     Finish {
                         pc_increment: (2 + x).into(),
