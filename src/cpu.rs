@@ -403,6 +403,25 @@ impl Cpu {
                     elapsed_cycles: 8,
                 }
             } // LD (HL-),A
+            0x33 => {
+                self.registers.sp += 1;
+                Finish {
+                    pc_increment: 1,
+                    elapsed_cycles: 8,
+                }
+            } // INC SP
+            0x34 => {
+                let mut value_at_hl = memory.read(self.registers.hl());
+                let finish = inc_u8(&mut value_at_hl, &mut self.registers.f, 12);
+                memory.write(self.registers.hl(), value_at_hl);
+                finish
+            } // INC (HL)
+            0x35 => {
+                let mut value_at_hl = memory.read(self.registers.hl());
+                let finish = dec_u8(&mut value_at_hl, &mut self.registers.f, 12);
+                memory.write(self.registers.hl(), value_at_hl);
+                finish
+            } // DEC (HL)
             0x36 => {
                 memory.write(self.registers.hl(), memory.read(self.registers.pc + 1));
                 Finish {
