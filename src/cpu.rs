@@ -5,6 +5,8 @@ use crate::{bit, make_u16};
 
 mod instructions;
 
+// rwtodo: dang, I've got to check every - and + to ensure wraparounds.
+
 //rwtodo: I can probably do something nifty with Rust attributes to make the "instruction" functions more ergonomic.
 
 // rwtodo: Apparently STOP is like HALT except the LCD is inoperational as well, and the "stopped" state is only exited when a button is pressed. Look for better documentation on it.
@@ -429,6 +431,50 @@ impl Cpu {
                     elapsed_cycles: 12,
                 }
             } // LD (HL),x
+            0x37 => {
+                self.registers.f &= !Registers::FLAG_SUBTRACTION;
+                self.registers.f &= !Registers::FLAG_HALFCARRY;
+                self.registers.f |= Registers::FLAG_CARRY;
+                Finish {
+                    pc_increment: 1,
+                    elapsed_cycles: 4,
+                }
+            } // SCF
+            0x38 => {
+                if self.registers.f & Registers::FLAG_CARRY != 0 {
+                    Finish {
+                        pc_increment: 2 + i16::from(memory.read(self.registers.pc + 1) as i8),
+                        elapsed_cycles: 12,
+                    }
+                } else {
+                    Finish {
+                        pc_increment: 2,
+                        elapsed_cycles: 8,
+                    }
+                }
+            } // JR C,s
+            0x39 => {
+                let mut hl = self.registers.hl();
+                let finish = add_reg16(self.registers.sp, &mut hl, &mut self.registers.f);
+                self.registers.set_hl(hl);
+                finish
+            } // ADD HL,SP
+            0x3a => {
+                self.registers.a = memory.read(self.registers.hl());
+                self.registers.set_hl(self.registers.hl() - 1);
+                Finish {
+                    pc_increment: 1,
+                    elapsed_cycles: 8,
+                }
+            } // LD A,(HL-)
+            0x3b => {
+                self.registers.sp -= 1;
+                Finish {
+                    pc_increment: 1,
+                    elapsed_cycles: 8,
+                }
+            } // DEC SP
+            0x3c => inc_u8(&mut self.registers.a, &mut self.registers.f, 4), // INC A
             0x3d => dec_u8(&mut self.registers.a, &mut self.registers.f, 4), // DEC A
             0x3e => ld_reg8_mem8(&mut self.registers.a, memory.read(self.registers.pc + 1)), // LD A,x
             0x40 => nop(),                                                 // LD B,B
