@@ -209,7 +209,7 @@ impl Cpu {
                 }
             } // INC BC
             0x04 => inc_u8(&mut self.registers.b, &mut self.registers.f, 4), // INC B
-            0x05 => dec_reg8(&mut self.registers.b, &mut self.registers.f), // DEC B
+            0x05 => dec_u8(&mut self.registers.b, &mut self.registers.f, 4), // DEC B
             0x06 => ld_reg8_mem8(&mut self.registers.b, memory.read(self.registers.pc + 1)), // LD B,x
             0x07 => {
                 if self.registers.a & bit(7) != 0 {
@@ -259,7 +259,7 @@ impl Cpu {
                 }
             } // DEC BC
             0x0c => inc_u8(&mut self.registers.c, &mut self.registers.f, 4), // INC C
-            0x0d => dec_reg8(&mut self.registers.c, &mut self.registers.f),  // DEC C
+            0x0d => dec_u8(&mut self.registers.c, &mut self.registers.f, 4), // DEC C
             0x0e => ld_reg8_mem8(&mut self.registers.c, memory.read(self.registers.pc + 1)), // LD C,x
             0x11 => {
                 self.registers
@@ -269,9 +269,9 @@ impl Cpu {
                     elapsed_cycles: 12,
                 }
             } // LD DE,xx
-            0x15 => dec_reg8(&mut self.registers.d, &mut self.registers.f), // DEC D
+            0x15 => dec_u8(&mut self.registers.d, &mut self.registers.f, 4), // DEC D
             0x16 => ld_reg8_mem8(&mut self.registers.d, memory.read(self.registers.pc + 1)), // LD D,x
-            0x1d => dec_reg8(&mut self.registers.e, &mut self.registers.f), // DEC E
+            0x1d => dec_u8(&mut self.registers.e, &mut self.registers.f, 4), // DEC E
             0x1e => ld_reg8_mem8(&mut self.registers.e, memory.read(self.registers.pc + 1)), // LD E,x
             0x20 => {
                 if (self.registers.f & Registers::FLAG_ZERO) != 0 {
@@ -294,7 +294,7 @@ impl Cpu {
                     elapsed_cycles: 12,
                 }
             } // LD HL,xx
-            0x25 => dec_reg8(&mut self.registers.h, &mut self.registers.f), // DEC H
+            0x25 => dec_u8(&mut self.registers.h, &mut self.registers.f, 4), // DEC H
             0x26 => ld_reg8_mem8(&mut self.registers.h, memory.read(self.registers.pc + 1)), // LD H,x
             0x27 => {
                 let mut new_a: u16 = self.registers.a.into();
@@ -364,7 +364,7 @@ impl Cpu {
                 }
             } // LD A,(HL+)
             0x2c => inc_u8(&mut self.registers.l, &mut self.registers.f, 4), // INC L
-            0x2d => dec_reg8(&mut self.registers.l, &mut self.registers.f),  // DEC L
+            0x2d => dec_u8(&mut self.registers.l, &mut self.registers.f, 4), // DEC L
             0x2e => ld_reg8_mem8(&mut self.registers.l, memory.read(self.registers.pc + 1)), // LD L,x
             0x2f => {
                 self.registers.a ^= 0xff;
@@ -410,7 +410,7 @@ impl Cpu {
                     elapsed_cycles: 12,
                 }
             } // LD (HL),x
-            0x3d => dec_reg8(&mut self.registers.a, &mut self.registers.f), // DEC A
+            0x3d => dec_u8(&mut self.registers.a, &mut self.registers.f, 4), // DEC A
             0x3e => ld_reg8_mem8(&mut self.registers.a, memory.read(self.registers.pc + 1)), // LD A,x
             0x40 => nop(),                                                 // LD B,B
             0x41 => ld_reg8_reg8(&mut self.registers.b, self.registers.c), // LD B,C

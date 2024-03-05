@@ -273,16 +273,16 @@ pub fn nop() -> Finish {
     }
 }
 
-pub fn dec_reg8(register_to_dec: &mut u8, register_f: &mut u8) -> Finish {
-    if subtraction_produces_u8_half_carry(*register_to_dec, 1, *register_f, false) {
+pub fn dec_u8(value_to_dec: &mut u8, register_f: &mut u8, elapsed_cycles: u8) -> Finish {
+    if subtraction_produces_u8_half_carry(*value_to_dec, 1, *register_f, false) {
         *register_f |= Registers::FLAG_HALFCARRY;
     } else {
         *register_f &= !Registers::FLAG_HALFCARRY;
     }
 
-    *register_to_dec = register_to_dec.wrapping_sub(1);
+    *value_to_dec = value_to_dec.wrapping_sub(1);
 
-    if *register_to_dec != 0 {
+    if *value_to_dec != 0 {
         *register_f &= !Registers::FLAG_ZERO;
     } else {
         *register_f |= Registers::FLAG_ZERO;
@@ -292,7 +292,7 @@ pub fn dec_reg8(register_to_dec: &mut u8, register_f: &mut u8) -> Finish {
 
     Finish {
         pc_increment: 1,
-        elapsed_cycles: 4,
+        elapsed_cycles,
     }
 }
 
