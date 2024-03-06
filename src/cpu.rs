@@ -273,6 +273,55 @@ impl Cpu {
             } // LD DE,xx
             0x15 => dec_u8(&mut self.registers.d, &mut self.registers.f, 4), // DEC D
             0x16 => ld_reg8_mem8(&mut self.registers.d, memory.read(self.registers.pc + 1)), // LD D,x
+            0x17 => {
+                let previous_carry = self.registers.f & Registers::FLAG_CARRY != 0;
+
+                if self.registers.a & bit(7) != 0 {
+                    self.registers.f |= Registers::FLAG_CARRY;
+                } else {
+                    self.registers.f &= !Registers::FLAG_CARRY;
+                }
+
+                self.registers.a = self.registers.a << 1;
+
+                if previous_carry {
+                    self.registers.a |= bit(0);
+                }
+
+                self.registers.f &= !Registers::FLAG_ZERO;
+                self.registers.f &= !Registers::FLAG_SUBTRACTION;
+                self.registers.f &= !Registers::FLAG_HALFCARRY;
+
+                Finish {
+                    pc_increment: 1,
+                    elapsed_cycles: 4,
+                }
+            } // RLA
+            0x18 => Finish {
+                pc_increment: 2 + i16::from(memory.read(self.registers.pc + 1) as i8),
+                elapsed_cycles: 12,
+            }, // JR s
+            0x19 => {
+                let mut hl = self.registers.hl();
+                let finish = add_reg16(self.registers.de(), &mut hl, &mut self.registers.f);
+                self.registers.set_hl(hl);
+                finish
+            } // ADD HL,DE
+            0x1a => {
+                self.registers.a = memory.read(self.registers.de());
+                Finish {
+                    pc_increment: 1,
+                    elapsed_cycles: 8,
+                }
+            } // LD A,(DE)
+            0x1b => {
+                self.registers.set_de(self.registers.de() - 1);
+                Finish {
+                    pc_increment: 1,
+                    elapsed_cycles: 8,
+                }
+            } // DEC DE
+            0x1c => inc_u8(&mut self.registers.e, &mut self.registers.f, 4), // INC E
             0x1d => dec_u8(&mut self.registers.e, &mut self.registers.f, 4), // DEC E
             0x1e => ld_reg8_mem8(&mut self.registers.e, memory.read(self.registers.pc + 1)), // LD E,x
             0x20 => {
