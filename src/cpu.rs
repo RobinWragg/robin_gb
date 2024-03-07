@@ -325,7 +325,7 @@ impl Cpu {
             0x1d => dec_u8(&mut self.registers.e, &mut self.registers.f, 4), // DEC E
             0x1e => ld_reg8_mem8(&mut self.registers.e, memory.read(self.registers.pc + 1)), // LD E,x
             0x20 => {
-                if (self.registers.f & Registers::FLAG_ZERO) != 0 {
+                if (self.registers.f & Registers::FLAG_ZERO) == 0 {
                     Finish {
                         pc_increment: 2 + i16::from(memory.read(self.registers.pc + 1) as i8),
                         elapsed_cycles: 12,
@@ -754,16 +754,16 @@ impl Cpu {
             0xbe => cp(memory.read(self.registers.hl()), &mut self.registers, 1, 8),  // CP (HL)
             0xbf => cp(self.registers.a, &mut self.registers, 1, 4),                  // RES 7,A
             0xc0 => {
-                if self.registers.f & Registers::FLAG_ZERO != 0 {
-                    Finish {
-                        pc_increment: 1,
-                        elapsed_cycles: 8,
-                    }
-                } else {
+                if self.registers.f & Registers::FLAG_ZERO == 0 {
                     self.registers.pc = stack_pop(&mut self.registers.sp, memory);
                     Finish {
                         pc_increment: 0,
                         elapsed_cycles: 20,
+                    }
+                } else {
+                    Finish {
+                        pc_increment: 1,
+                        elapsed_cycles: 8,
                     }
                 }
             } // RET NZ
