@@ -111,7 +111,7 @@ pub fn inc_u8(value_to_increment: &mut u8, register_f: &mut u8, elapsed_cycles: 
         *register_f &= !Registers::FLAG_HALFCARRY;
     }
 
-    *value_to_increment += 1;
+    *value_to_increment = value_to_increment.wrapping_add(1);
 
     if *value_to_increment != 0 {
         *register_f &= !Registers::FLAG_ZERO;

@@ -345,6 +345,22 @@ impl Cpu {
                     elapsed_cycles: 12,
                 }
             } // LD HL,xx
+            0x22 => {
+                memory.write(self.registers.hl(), self.registers.a);
+                self.registers.set_hl(self.registers.hl() + 1);
+                Finish {
+                    pc_increment: 1,
+                    elapsed_cycles: 8,
+                }
+            } // LD (HL+),A
+            0x23 => {
+                self.registers.set_hl(self.registers.hl() + 1);
+                Finish {
+                    pc_increment: 1,
+                    elapsed_cycles: 8,
+                }
+            } // INC HL
+            0x24 => inc_u8(&mut self.registers.h, &mut self.registers.f, 4), // INC H
             0x25 => dec_u8(&mut self.registers.h, &mut self.registers.f, 4), // DEC H
             0x26 => ld_reg8_mem8(&mut self.registers.h, memory.read(self.registers.pc + 1)), // LD H,x
             0x27 => {
