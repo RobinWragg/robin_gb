@@ -1048,6 +1048,21 @@ impl Cpu {
                     elapsed_cycles: 12,
                 }
             } // LDH A,(0xff00+x)
+            0xf1 => {
+                let new_af = stack_pop(&mut self.registers.sp, memory) & 0xfff0; // Lower nybble of F must stay 0.
+                self.registers.set_af(new_af);
+                Finish {
+                    pc_increment: 1,
+                    elapsed_cycles: 12,
+                }
+            } // POP AF
+            0xf2 => {
+                self.registers.a = memory.read(0xff00 + u16::from(self.registers.c));
+                Finish {
+                    pc_increment: 1,
+                    elapsed_cycles: 8,
+                }
+            } // LD A,(ff00+C)
             0xf3 => {
                 self.registers.ime = false;
                 Finish {
