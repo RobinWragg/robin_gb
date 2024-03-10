@@ -1,6 +1,23 @@
-use crate::cpu::*;
+use super::*;
 
+pub mod cb;
+
+#[deprecated]
 pub struct Finish {
+    pub pc_increment: i16,
+    pub elapsed_cycles: u8,
+}
+
+pub struct FlagChanges {
+    pub z: Option<bool>,
+    pub n: Option<bool>,
+    pub h: Option<bool>,
+    pub c: Option<bool>,
+}
+
+// rwtodo: Rename to 'Finish' when the original is fully removed.
+pub struct Finish2 {
+    pub flag_changes: FlagChanges,
     pub pc_increment: i16,
     pub elapsed_cycles: u8,
 }

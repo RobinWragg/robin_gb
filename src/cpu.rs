@@ -1,9 +1,10 @@
+mod instructions;
+
 use crate::address;
 use crate::interrupt;
 use crate::Memory;
 use crate::{bit, make_u16};
-
-mod instructions;
+use instructions::FlagChanges;
 
 // rwtodo: dang, I've got to check every - and + to ensure wraparounds.
 
@@ -112,6 +113,54 @@ impl Registers {
         let bytes = new_hl.to_le_bytes();
         self.l = bytes[0];
         self.h = bytes[1];
+    }
+
+    fn register_specified_by_opcode(&mut self, opcode: u8) -> &mut u8 {
+        match opcode & 0x0f {
+            0x00 => &mut self.b,
+            0x01 => &mut self.c,
+            0x02 => &mut self.d,
+            0x03 => &mut self.e,
+            0x04 => &mut self.h,
+            0x05 => &mut self.l,
+            // 0x06 => TODO
+            0x07 => &mut self.a,
+            _ => todo!(),
+        }
+    }
+
+    fn change_flags(&mut self, flag_changes: &FlagChanges) {
+        if let Some(z) = flag_changes.z {
+            if z {
+                self.f |= Self::FLAG_ZERO;
+            } else {
+                self.f &= !Self::FLAG_ZERO;
+            }
+        }
+
+        if let Some(n) = flag_changes.n {
+            if n {
+                self.f |= Self::FLAG_SUBTRACTION;
+            } else {
+                self.f &= !Self::FLAG_SUBTRACTION;
+            }
+        }
+
+        if let Some(h) = flag_changes.h {
+            if h {
+                self.f |= Self::FLAG_HALFCARRY;
+            } else {
+                self.f &= !Self::FLAG_HALFCARRY;
+            }
+        }
+
+        if let Some(c) = flag_changes.c {
+            if c {
+                self.f |= Self::FLAG_CARRY;
+            } else {
+                self.f &= !Self::FLAG_CARRY;
+            }
+        }
     }
 }
 
@@ -850,7 +899,15 @@ impl Cpu {
                     }
                 }
             } // JP Z,xx
-            0xcb => todo!("No 0xcb instructions yet"),
+            0xcb => {
+                let finish2 = cb::execute_cb_instruction(&mut self.registers, memory);
+                self.registers.change_flags(&finish2.flag_changes);
+
+                Finish {
+                    pc_increment: finish2.pc_increment,
+                    elapsed_cycles: finish2.elapsed_cycles,
+                }
+            }
             0xcc => call_condition(
                 self.registers.f & Registers::FLAG_ZERO != 0,
                 &mut self.registers,

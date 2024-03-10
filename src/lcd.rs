@@ -1,6 +1,6 @@
 use crate::address;
 use crate::interrupt;
-use crate::memory::Memory;
+use crate::Memory;
 
 mod render;
 use render::Renderer;

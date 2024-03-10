@@ -22,7 +22,7 @@ fn bit(index: u8) -> u8 {
 // rwtodo: interrupt responsibility is shared here and in the Cpu impl, which is icky.
 mod interrupt {
     use crate::address;
-    use crate::memory::Memory;
+    use crate::Memory;
 
     pub const FLAG_VBLANK: u8 = 0x01;
     pub const FLAG_LCD_STAT: u8 = 0x02;
