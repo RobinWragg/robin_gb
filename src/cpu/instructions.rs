@@ -149,6 +149,7 @@ pub fn print_instruction(pc: u16, memory: &mut Memory) {
         0x6f => println!("LD L,A"),
         0xaf => println!("XOR A"),
         0xc3 => println!("JP {:#06x}", memory.read_u16(pc + 1)),
+        0xc8 => println!("RET Z"),
         0xcd => println!("CALL {:#06x}", memory.read_u16(pc + 1)),
         0xe0 => println!("LDH {:#06x},A", 0xff00 + u16::from(memory.read(pc + 1))),
         0xf0 => println!("LDH A,{:#06x}", 0xff00 + u16::from(memory.read(pc + 1))),
@@ -293,20 +294,13 @@ pub fn add_reg16(src: u16, dst_register: &mut u16) -> Finish2 {
         .flag_c(full_carry)
 }
 
-pub fn call_condition(condition: bool, registers: &mut Registers, memory: &mut Memory) -> Finish {
+pub fn call(condition: bool, registers: &mut Registers, memory: &mut Memory) -> Finish2 {
     if condition {
         stack_push(registers.pc + 3, &mut registers.sp, memory);
-
         registers.pc = memory.read_u16(registers.pc + 1);
-        Finish {
-            pc_increment: 0,
-            elapsed_cycles: 24,
-        }
+        Finish2::new(0, 24)
     } else {
-        Finish {
-            pc_increment: 3,
-            elapsed_cycles: 12,
-        }
+        Finish2::new(3, 12)
     }
 }
 
@@ -410,11 +404,8 @@ pub fn cp(comparator: u8, registers: &Registers, pc_increment: i16, elapsed_cycl
         .flag_c(full_carry)
 }
 
-pub fn rst(address_lower_byte: u8, registers: &mut Registers, memory: &mut Memory) -> Finish {
+pub fn rst(address_lower_byte: u8, registers: &mut Registers, memory: &mut Memory) -> Finish2 {
     stack_push(registers.pc + 1, &mut registers.sp, memory);
     registers.pc = address_lower_byte.into();
-    Finish {
-        pc_increment: 0,
-        elapsed_cycles: 16,
-    }
+    Finish2::new(0, 16)
 }

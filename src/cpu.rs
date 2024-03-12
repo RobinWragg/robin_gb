@@ -412,12 +412,10 @@ impl Cpu {
             0x2e => ld_reg8_mem8(&mut self.registers.l, memory.read(self.registers.pc + 1)), // LD L,x
             0x2f => {
                 self.registers.a ^= 0xff;
-                self.registers.f |= Registers::FLAG_SUBTRACTION;
-                self.registers.f |= Registers::FLAG_HALFCARRY;
-                Finish2::new(1, 4)
+                Finish2::new(1, 4).flag_n(true).flag_h(true)
             } // CPL
             0x30 => {
-                if (self.registers.f & Registers::FLAG_CARRY) == 0 {
+                if self.registers.f & Registers::FLAG_CARRY == 0 {
                     Finish2::new(2 + i16::from(memory.read(self.registers.pc + 1) as i8), 12)
                 } else {
                     Finish2::new(2, 8)
@@ -452,12 +450,7 @@ impl Cpu {
                 memory.write(self.registers.hl(), memory.read(self.registers.pc + 1));
                 Finish2::new(2, 12)
             } // LD (HL),x
-            0x37 => {
-                self.registers.f &= !Registers::FLAG_SUBTRACTION;
-                self.registers.f &= !Registers::FLAG_HALFCARRY;
-                self.registers.f |= Registers::FLAG_CARRY;
-                Finish2::new(1, 4)
-            } // SCF
+            0x37 => Finish2::new(1, 4).flag_n(false).flag_h(false).flag_c(true),             // SCF
             0x38 => {
                 if self.registers.f & Registers::FLAG_CARRY != 0 {
                     Finish2::new(2 + i16::from(memory.read(self.registers.pc + 1) as i8), 12)
@@ -655,426 +648,277 @@ impl Cpu {
             0xbd => cp(self.registers.l, &mut self.registers, 1, 4), // CP L // rwtodo &mut? &?
             0xbe => cp(memory.read(self.registers.hl()), &mut self.registers, 1, 8), // CP (HL)
             0xbf => cp(self.registers.a, &mut self.registers, 1, 4), // RES 7,A
-            // 0xc0 => {
-            //     if self.registers.f & Registers::FLAG_ZERO == 0 {
-            //         self.registers.pc = stack_pop(&mut self.registers.sp, memory);
-            //         Finish2 {
-            //             pc_increment: 0,
-            //             elapsed_cycles: 20,
-            //         }
-            //     } else {
-            //         Finish2 {
-            //             pc_increment: 1,
-            //             elapsed_cycles: 8,
-            //         }
-            //     }
-            // } // RET NZ
-            // 0xc1 => {
-            //     let new_bc = stack_pop(&mut self.registers.sp, memory);
-            //     self.registers.set_bc(new_bc);
-            //     Finish2 {
-            //         pc_increment: 1,
-            //         elapsed_cycles: 12,
-            //     }
-            // } // POP BC
-            // 0xc2 => {
-            //     if self.registers.f & Registers::FLAG_ZERO == 0 {
-            //         self.registers.pc = memory.read_u16(self.registers.pc + 1);
-            //         Finish2 {
-            //             pc_increment: 0,
-            //             elapsed_cycles: 16,
-            //         }
-            //     } else {
-            //         Finish2 {
-            //             pc_increment: 3,
-            //             elapsed_cycles: 12,
-            //         }
-            //     }
-            // } // JP NZ,xx
-            // 0xc3 => {
-            //     self.registers.pc = memory.read_u16(self.registers.pc + 1);
-            //     Finish2 {
-            //         pc_increment: 0,
-            //         elapsed_cycles: 16,
-            //     }
-            // } // JP xx
-            // 0xc4 => call_condition(
-            //     self.registers.f & Registers::FLAG_ZERO == 0,
-            //     &mut self.registers,
-            //     memory,
-            // ), // CALL NZ,xx
-            // 0xc5 => {
-            //     stack_push(self.registers.bc(), &mut self.registers.sp, memory);
-            //     Finish2 {
-            //         pc_increment: 1,
-            //         elapsed_cycles: 16,
-            //     }
-            // } // PUSH BC
-            // 0xc6 => add_u8(
-            //     memory.read(self.registers.pc + 1),
-            //     &mut self.registers,
-            //     2,
-            //     8,
-            // ), // ADD A,x
-            // 0xc7 => rst(0x00, &mut self.registers, memory),                           // RST 00h
-            // 0xc8 => {
-            //     if self.registers.f & Registers::FLAG_ZERO != 0 {
-            //         self.registers.pc = stack_pop(&mut self.registers.sp, memory);
-            //         Finish2 {
-            //             pc_increment: 0,
-            //             elapsed_cycles: 20,
-            //         }
-            //     } else {
-            //         Finish2 {
-            //             pc_increment: 1,
-            //             elapsed_cycles: 8,
-            //         }
-            //     }
-            // } // RET Z
-            // 0xc9 => {
-            //     self.registers.pc = stack_pop(&mut self.registers.sp, memory);
-            //     Finish2 {
-            //         pc_increment: 0,
-            //         elapsed_cycles: 16,
-            //     }
-            // } // RET
-            // 0xca => {
-            //     if self.registers.f & Registers::FLAG_ZERO != 0 {
-            //         self.registers.pc = memory.read_u16(self.registers.pc + 1);
-            //         Finish2 {
-            //             pc_increment: 0,
-            //             elapsed_cycles: 16,
-            //         }
-            //     } else {
-            //         Finish2 {
-            //             pc_increment: 3,
-            //             elapsed_cycles: 12,
-            //         }
-            //     }
-            // } // JP Z,xx
-            // 0xcb => {
-            //     let finish2 = cb::execute_cb_instruction(&mut self.registers, memory);
-            //     self.registers.change_flags(&finish2.flag_changes);
+            0xc0 => {
+                if self.registers.f & Registers::FLAG_ZERO == 0 {
+                    self.registers.pc = stack_pop(&mut self.registers.sp, memory);
+                    Finish2::new(0, 20)
+                } else {
+                    Finish2::new(1, 8)
+                }
+            } // RET NZ
+            0xc1 => {
+                let new_bc = stack_pop(&mut self.registers.sp, memory);
+                self.registers.set_bc(new_bc);
+                Finish2::new(1, 12)
+            } // POP BC
+            0xc2 => {
+                if self.registers.f & Registers::FLAG_ZERO == 0 {
+                    self.registers.pc = memory.read_u16(self.registers.pc + 1);
+                    Finish2::new(0, 16)
+                } else {
+                    Finish2::new(3, 12)
+                }
+            } // JP NZ,xx
+            0xc3 => {
+                self.registers.pc = memory.read_u16(self.registers.pc + 1);
+                Finish2::new(0, 16)
+            } // JP xx
+            0xc4 => call(
+                self.registers.f & Registers::FLAG_ZERO == 0,
+                &mut self.registers,
+                memory,
+            ), // CALL NZ,xx
+            0xc5 => {
+                stack_push(self.registers.bc(), &mut self.registers.sp, memory);
+                Finish2::new(1, 16)
+            } // PUSH BC
+            0xc6 => add_u8(
+                memory.read(self.registers.pc + 1),
+                &mut self.registers,
+                2,
+                8,
+            ), // ADD A,x
+            0xc7 => rst(0x00, &mut self.registers, memory),          // RST 00h
+            0xc8 => {
+                if self.registers.f & Registers::FLAG_ZERO != 0 {
+                    self.registers.pc = stack_pop(&mut self.registers.sp, memory);
+                    Finish2::new(0, 20)
+                } else {
+                    Finish2::new(1, 8)
+                }
+            } // RET Z
+            0xc9 => {
+                self.registers.pc = stack_pop(&mut self.registers.sp, memory);
+                Finish2::new(0, 16)
+            } // RET
+            0xca => {
+                if self.registers.f & Registers::FLAG_ZERO != 0 {
+                    self.registers.pc = memory.read_u16(self.registers.pc + 1);
+                    Finish2::new(0, 16)
+                } else {
+                    Finish2::new(3, 12)
+                }
+            } // JP Z,xx
+            0xcb => cb::execute_cb_instruction(&mut self.registers, memory), // 0xcb prefixed opcodes
+            0xcc => call(
+                self.registers.f & Registers::FLAG_ZERO != 0,
+                &mut self.registers,
+                memory,
+            ), // CALL Z,xx
+            0xcd => call(true, &mut self.registers, memory),                 // CALL xx
+            0xce => {
+                let x = memory.read(self.registers.pc + 1);
+                adc(x, &mut self.registers, 2, 8)
+            } // ADC A,x
+            0xcf => rst(0x08, &mut self.registers, memory),                  // RST 08h
+            0xd0 => {
+                if self.registers.f & Registers::FLAG_CARRY == 0 {
+                    self.registers.pc = stack_pop(&mut self.registers.sp, memory);
+                    Finish2::new(0, 20)
+                } else {
+                    Finish2::new(1, 8)
+                }
+            } // RET NC
+            0xd1 => {
+                let popped_value = stack_pop(&mut self.registers.sp, memory);
+                self.registers.set_de(popped_value);
+                Finish2::new(1, 12)
+            }
+            0xd2 => {
+                if self.registers.f & Registers::FLAG_CARRY == 0 {
+                    self.registers.pc = memory.read_u16(self.registers.pc + 1);
+                    Finish2::new(0, 16)
+                } else {
+                    Finish2::new(3, 12)
+                }
+            } // JP NC,xx
+            0xd3 => unreachable!("Invalid opcode"),
 
-            //     Finish2 {
-            //         pc_increment: finish2.pc_increment,
-            //         elapsed_cycles: finish2.elapsed_cycles,
-            //     }
-            // }
-            // 0xcc => call_condition(
-            //     self.registers.f & Registers::FLAG_ZERO != 0,
-            //     &mut self.registers,
-            //     memory,
-            // ), // CALL Z,xx
-            // 0xcd => call_condition(true, &mut self.registers, memory), // CALL xx
-            // 0xce => {
-            //     let x = memory.read(self.registers.pc + 1);
-            //     adc(x, &mut self.registers, 2, 8)
-            // } // ADC A,x
-            // 0xcf => rst(0x08, &mut self.registers, memory),            // RST 08h
-            // 0xd0 => {
-            //     if self.registers.f & Registers::FLAG_CARRY == 0 {
-            //         self.registers.pc = stack_pop(&mut self.registers.sp, memory);
-            //         Finish2 {
-            //             pc_increment: 0,
-            //             elapsed_cycles: 20,
-            //         }
-            //     } else {
-            //         Finish2 {
-            //             pc_increment: 1,
-            //             elapsed_cycles: 8,
-            //         }
-            //     }
-            // } // RET NC
-            // 0xd1 => {
-            //     let popped_value = stack_pop(&mut self.registers.sp, memory);
-            //     self.registers.set_de(popped_value);
-            //     Finish2 {
-            //         pc_increment: 1,
-            //         elapsed_cycles: 12,
-            //     }
-            // }
-            // 0xd2 => {
-            //     if self.registers.f & Registers::FLAG_CARRY == 0 {
-            //         self.registers.pc = memory.read_u16(self.registers.pc + 1);
-            //         Finish2 {
-            //             pc_increment: 0,
-            //             elapsed_cycles: 16,
-            //         }
-            //     } else {
-            //         Finish2 {
-            //             pc_increment: 3,
-            //             elapsed_cycles: 12,
-            //         }
-            //     }
-            // } // JP NC,xx
-            // 0xd3 => unreachable!("Invalid opcode"),
+            0xd4 => call(
+                self.registers.f & Registers::FLAG_CARRY == 0,
+                &mut self.registers,
+                memory,
+            ), // CALL NC,xx
+            0xd5 => {
+                stack_push(self.registers.de(), &mut self.registers.sp, memory);
+                Finish2::new(1, 16)
+            } // PUSH DE
+            0xd6 => {
+                let x = memory.read(self.registers.pc + 1);
+                sub(x, &mut self.registers, 2, 8)
+            } // SUB x
+            0xd7 => rst(0x10, &mut self.registers, memory), // RST 10h
+            0xd8 => {
+                if self.registers.f & Registers::FLAG_CARRY != 0 {
+                    self.registers.pc = stack_pop(&mut self.registers.sp, memory);
+                    Finish2::new(0, 20)
+                } else {
+                    Finish2::new(1, 8)
+                }
+            } // RET C
+            0xd9 => {
+                self.registers.pc = stack_pop(&mut self.registers.sp, memory);
+                self.registers.ime = true;
+                Finish2::new(0, 16)
+            } // RETI
+            0xda => {
+                if self.registers.f & Registers::FLAG_CARRY != 0 {
+                    self.registers.pc = memory.read_u16(self.registers.pc + 1);
+                    Finish2::new(0, 16)
+                } else {
+                    Finish2::new(3, 12)
+                }
+            } // JP C,xx
+            0xdb => unreachable!("Invalid opcode"),
+            0xdc => call(
+                self.registers.f & Registers::FLAG_CARRY != 0,
+                &mut self.registers,
+                memory,
+            ), // CALL C,xx
+            0xdd => unreachable!("Invalid opcode"),
+            0xde => {
+                let x = memory.read(self.registers.pc + 1);
+                sbc(x, &mut self.registers, 2, 8)
+            } // SBC A,x
+            0xdf => rst(0x18, &mut self.registers, memory), // RST 18h
+            0xe0 => {
+                memory.write(
+                    0xff00 + u16::from(memory.read(self.registers.pc + 1)),
+                    self.registers.a,
+                );
+                Finish2::new(2, 12)
+            } // LDH (ff00+x),A
+            0xe1 => {
+                let popped_value = stack_pop(&mut self.registers.sp, memory);
+                self.registers.set_hl(popped_value);
+                Finish2::new(1, 12)
+            } // POP HL
+            0xe2 => {
+                memory.write(0xff00 + u16::from(self.registers.c), self.registers.a);
+                Finish2::new(1, 8)
+            } // LD (ff00+C),A
+            0xe3 => unreachable!("Invalid opcode"),
+            0xe4 => unreachable!("Invalid opcode"),
+            0xe5 => {
+                stack_push(self.registers.hl(), &mut self.registers.sp, memory);
+                Finish2::new(1, 16)
+            } // PUSH HL
+            0xe6 => {
+                let x = memory.read(self.registers.pc + 1);
+                and(x, &mut self.registers.a, 2, 8)
+            } // AND x
+            0xe8 => {
+                // rwtodo: This is likely wrong.
+                let x: i32 = (memory.read(self.registers.pc + 1) as i8).into();
 
-            // 0xd4 => call_condition(
-            //     self.registers.f & Registers::FLAG_CARRY == 0,
-            //     &mut self.registers,
-            //     memory,
-            // ), // CALL NC,xx
-            // 0xd5 => {
-            //     stack_push(self.registers.de(), &mut self.registers.sp, memory);
-            //     Finish2 {
-            //         pc_increment: 1,
-            //         elapsed_cycles: 16,
-            //     }
-            // } // PUSH DE
-            // 0xd6 => {
-            //     let x = memory.read(self.registers.pc + 1);
-            //     sub(x, &mut self.registers, 2, 8)
-            // } // SUB x
-            // 0xd7 => rst(0x10, &mut self.registers, memory), // RST 10h
-            // 0xd8 => {
-            //     if self.registers.f & Registers::FLAG_CARRY != 0 {
-            //         self.registers.pc = stack_pop(&mut self.registers.sp, memory);
-            //         Finish2 {
-            //             pc_increment: 0,
-            //             elapsed_cycles: 20,
-            //         }
-            //     } else {
-            //         Finish2 {
-            //             pc_increment: 1,
-            //             elapsed_cycles: 8,
-            //         }
-            //     }
-            // } // RET C
-            // 0xd9 => {
-            //     self.registers.pc = stack_pop(&mut self.registers.sp, memory);
-            //     self.registers.ime = true;
-            //     Finish2 {
-            //         pc_increment: 0,
-            //         elapsed_cycles: 16,
-            //     }
-            // } // RETI
-            // 0xda => {
-            //     if self.registers.f & Registers::FLAG_CARRY != 0 {
-            //         self.registers.pc = memory.read_u16(self.registers.pc + 1);
-            //         Finish2 {
-            //             pc_increment: 0,
-            //             elapsed_cycles: 16,
-            //         }
-            //     } else {
-            //         Finish2 {
-            //             pc_increment: 3,
-            //             elapsed_cycles: 12,
-            //         }
-            //     }
-            // } // JP C,xx
-            // 0xdb => unreachable!("Invalid opcode"),
-            // 0xdc => call_condition(
-            //     self.registers.f & Registers::FLAG_CARRY != 0,
-            //     &mut self.registers,
-            //     memory,
-            // ), // CALL C,xx
-            // 0xdd => unreachable!("Invalid opcode"),
-            // 0xde => {
-            //     let x = memory.read(self.registers.pc + 1);
-            //     sbc(x, &mut self.registers, 2, 8)
-            // } // SBC A,x
-            // 0xdf => rst(0x18, &mut self.registers, memory), // RST 18h
-            // 0xe0 => {
-            //     memory.write(
-            //         0xff00 + u16::from(memory.read(self.registers.pc + 1)),
-            //         self.registers.a,
-            //     );
-            //     Finish2 {
-            //         pc_increment: 2,
-            //         elapsed_cycles: 12,
-            //     }
-            // } // LDH (ff00+x),A
-            // 0xe1 => {
-            //     let popped_value = stack_pop(&mut self.registers.sp, memory);
-            //     self.registers.set_hl(popped_value);
-            //     Finish2 {
-            //         pc_increment: 1,
-            //         elapsed_cycles: 12,
-            //     }
-            // } // POP HL
-            // 0xe2 => {
-            //     memory.write(0xff00 + u16::from(self.registers.c), self.registers.a);
-            //     Finish2 {
-            //         pc_increment: 1,
-            //         elapsed_cycles: 8,
-            //     }
-            // } // LD (ff00+C),A
-            // 0xe3 => unreachable!("Invalid opcode"),
-            // 0xe4 => unreachable!("Invalid opcode"),
-            // 0xe5 => {
-            //     stack_push(self.registers.hl(), &mut self.registers.sp, memory);
-            //     Finish2 {
-            //         pc_increment: 1,
-            //         elapsed_cycles: 16,
-            //     }
-            // } // PUSH HL
-            // 0xe6 => {
-            //     let x = memory.read(self.registers.pc + 1);
-            //     and(x, &mut self.registers, 2, 8)
-            // } // AND x
-            // 0xe8 => {
-            //     // rwtodo: This is likely wrong.
-            //     let x: i32 = (memory.read(self.registers.pc + 1) as i8).into();
+                // rwtodo: Investigate what happens with this double XOR.
+                let sp32: i32 = self.registers.sp.into();
+                let xor_result = sp32 ^ x ^ (sp32 + x);
 
-            //     // rwtodo: Investigate what happens with this double XOR.
-            //     let sp32: i32 = self.registers.sp.into();
-            //     let xor_result = sp32 ^ x ^ (sp32 + x);
+                self.registers.sp = self.registers.sp.wrapping_add_signed(x.try_into().unwrap());
 
-            //     self.registers.f = 0;
-            //     if (xor_result & 0x10) != 0 {
-            //         self.registers.f |= Registers::FLAG_HALFCARRY;
-            //     }
-            //     if (xor_result & 0x100) != 0 {
-            //         self.registers.f |= Registers::FLAG_CARRY;
-            //     }
+                Finish2::new(2, 16)
+                    .flag_z(false)
+                    .flag_n(false)
+                    .flag_h(xor_result & 0x10 != 0)
+                    .flag_c(xor_result & 0x100 != 0)
+            } // ADD SP,s
+            0xe9 => {
+                self.registers.pc = self.registers.hl();
+                Finish2::new(0, 4)
+            } // JP (HL)
+            0xea => {
+                memory.write(memory.read_u16(self.registers.pc + 1), self.registers.a);
+                Finish2::new(3, 16)
+            } // LD (x),A
+            0xf0 => {
+                self.registers.a =
+                    memory.read(0xff00 + u16::from(memory.read(self.registers.pc + 1)));
+                Finish2::new(2, 12)
+            } // LDH A,(0xff00+x)
+            0xf1 => {
+                let new_af = stack_pop(&mut self.registers.sp, memory) & 0xfff0; // Lower nybble of F must stay 0.
+                self.registers.set_af(new_af);
+                Finish2::new(1, 12)
+            } // POP AF
+            0xf2 => {
+                self.registers.a = memory.read(0xff00 + u16::from(self.registers.c));
+                Finish2::new(1, 8)
+            } // LD A,(ff00+C)
+            0xf3 => {
+                self.registers.ime = false;
+                Finish2::new(1, 4)
+            } // DI
+            0xf4 => unreachable!("Invalid opcode"),
+            0xf5 => {
+                stack_push(self.registers.af(), &mut self.registers.sp, memory);
+                Finish2::new(1, 16)
+            } // PUSH AF
+            0xf6 => {
+                let x = memory.read(self.registers.pc + 1);
+                or(x, &mut self.registers.a, 2, 8)
+            } // OR x
+            0xf7 => rst(0x30, &mut self.registers, memory), // RST 30h
+            0xf8 => {
+                // rwtodo: This is likely wrong.
+                let x: i32 = (memory.read(self.registers.pc + 1) as i8).into();
 
-            //     self.registers.sp = self.registers.sp.wrapping_add_signed(x.try_into().unwrap());
+                // rwtodo: Investigate what happens with this double XOR.
+                let sp32: i32 = self.registers.sp.into();
+                let xor_result = sp32 ^ x ^ (sp32 + x);
 
-            //     Finish2 {
-            //         pc_increment: 2,
-            //         elapsed_cycles: 16,
-            //     }
-            // } // ADD SP,s
-            // 0xe9 => {
-            //     self.registers.pc = self.registers.hl();
-            //     Finish2 {
-            //         pc_increment: 0,
-            //         elapsed_cycles: 4,
-            //     }
-            // } // JP (HL)
-            // 0xea => {
-            //     memory.write(memory.read_u16(self.registers.pc + 1), self.registers.a);
-            //     Finish2 {
-            //         pc_increment: 3,
-            //         elapsed_cycles: 16,
-            //     }
-            // } // LD (x),A
-            // 0xf0 => {
-            //     self.registers.a =
-            //         memory.read(0xff00 + u16::from(memory.read(self.registers.pc + 1)));
-            //     Finish2 {
-            //         pc_increment: 2,
-            //         elapsed_cycles: 12,
-            //     }
-            // } // LDH A,(0xff00+x)
-            // 0xf1 => {
-            //     let new_af = stack_pop(&mut self.registers.sp, memory) & 0xfff0; // Lower nybble of F must stay 0.
-            //     self.registers.set_af(new_af);
-            //     Finish2 {
-            //         pc_increment: 1,
-            //         elapsed_cycles: 12,
-            //     }
-            // } // POP AF
-            // 0xf2 => {
-            //     self.registers.a = memory.read(0xff00 + u16::from(self.registers.c));
-            //     Finish2 {
-            //         pc_increment: 1,
-            //         elapsed_cycles: 8,
-            //     }
-            // } // LD A,(ff00+C)
-            // 0xf3 => {
-            //     self.registers.ime = false;
-            //     Finish2 {
-            //         pc_increment: 1,
-            //         elapsed_cycles: 4,
-            //     }
-            // } // DI
-            // 0xf4 => unreachable!("Invalid opcode"),
-            // 0xf5 => {
-            //     stack_push(self.registers.af(), &mut self.registers.sp, memory);
-            //     Finish2 {
-            //         pc_increment: 1,
-            //         elapsed_cycles: 16,
-            //     }
-            // } // PUSH AF
-            // 0xf6 => {
-            //     let x = memory.read(self.registers.pc + 1);
-            //     or(x, &mut self.registers, 2, 8)
-            // } // OR x
-            // 0xf7 => rst(0x30, &mut self.registers, memory), // RST 30h
-            // 0xf8 => {
-            //     // rwtodo: This is likely wrong.
-            //     let x: i32 = (memory.read(self.registers.pc + 1) as i8).into();
+                self.registers.set_hl((sp32 + x) as u16);
 
-            //     // rwtodo: Investigate what happens with this double XOR.
-            //     let sp32: i32 = self.registers.sp.into();
-            //     let xor_result = sp32 ^ x ^ (sp32 + x);
+                Finish2::new(2, 12)
+                    .flag_z(false)
+                    .flag_n(false)
+                    .flag_h(xor_result & 0x10 != 0)
+                    .flag_c(xor_result & 0x100 != 0)
+            } // LDHL SP,s
+            0xf9 => {
+                self.registers.sp = self.registers.hl();
+                Finish2::new(1, 8)
+            } // LD SP,HL
+            0xfa => {
+                let address = u16::from(memory.read_u16(self.registers.pc + 1));
+                self.registers.a = memory.read(address);
+                Finish2::new(3, 16)
+            } // LD A,(xx)
+            0xfb => {
+                self.registers.ime = true;
+                Finish2::new(1, 4)
+            } // IE
+            0xfc => unreachable!("Invalid opcode"),
+            0xfd => unreachable!("Invalid opcode"),
+            0xfe => {
+                let byte_0 = memory.read(self.registers.pc + 1);
 
-            //     self.registers.f = 0;
-            //     if (xor_result & 0x10) != 0 {
-            //         self.registers.f |= Registers::FLAG_HALFCARRY;
-            //     }
-            //     if (xor_result & 0x100) != 0 {
-            //         self.registers.f |= Registers::FLAG_CARRY;
-            //     }
+                let half_carry = subtraction_produces_u8_half_carry(
+                    self.registers.a,
+                    byte_0,
+                    self.registers.f,
+                    false,
+                );
+                let full_carry = subtraction_produces_u8_full_carry(self.registers.a, byte_0);
 
-            //     self.registers.set_hl((sp32 + x) as u16);
+                let sub_result = self.registers.a.wrapping_sub(byte_0);
 
-            //     Finish2 {
-            //         pc_increment: 2,
-            //         elapsed_cycles: 12,
-            //     }
-            // } // LDHL SP,s
-            // 0xf9 => {
-            //     self.registers.sp = self.registers.hl();
-            //     Finish2 {
-            //         pc_increment: 1,
-            //         elapsed_cycles: 8,
-            //     }
-            // } // LD SP,HL
-            // 0xfa => {
-            //     let address = u16::from(memory.read_u16(self.registers.pc + 1));
-            //     self.registers.a = memory.read(address);
-            //     Finish2 {
-            //         pc_increment: 3,
-            //         elapsed_cycles: 16,
-            //     }
-            // } // LD A,(xx)
-            // 0xfb => {
-            //     self.registers.ime = true;
-            //     Finish2 {
-            //         pc_increment: 1,
-            //         elapsed_cycles: 4,
-            //     }
-            // } // IE
-            // 0xfc => unreachable!("Invalid opcode"),
-            // 0xfd => unreachable!("Invalid opcode"),
-            // 0xfe => {
-            //     let byte_0 = memory.read(self.registers.pc + 1);
-
-            //     if subtraction_produces_u8_half_carry(
-            //         self.registers.a,
-            //         byte_0,
-            //         self.registers.f,
-            //         false,
-            //     ) {
-            //         self.registers.f |= Registers::FLAG_HALFCARRY;
-            //     } else {
-            //         self.registers.f &= !Registers::FLAG_HALFCARRY;
-            //     }
-
-            //     if subtraction_produces_u8_full_carry(self.registers.a, byte_0) {
-            //         self.registers.f |= Registers::FLAG_CARRY;
-            //     } else {
-            //         self.registers.f &= !Registers::FLAG_CARRY;
-            //     }
-
-            //     // Set the add/sub flag high, indicating subtraction.
-            //     self.registers.f |= Registers::FLAG_SUBTRACTION;
-
-            //     let sub_result = self.registers.a.wrapping_sub(byte_0);
-            //     if sub_result == 0 {
-            //         self.registers.f |= Registers::FLAG_ZERO;
-            //     } else {
-            //         self.registers.f &= !Registers::FLAG_ZERO;
-            //     }
-
-            //     Finish2 {
-            //         pc_increment: 2,
-            //         elapsed_cycles: 8,
-            //     }
-            // } // CP x
+                Finish2::new(2, 8)
+                    .flag_z(sub_result == 0)
+                    .flag_n(true)
+                    .flag_h(half_carry)
+                    .flag_c(full_carry)
+            } // CP x
             _ => todo!(
                 "Unknown opcode {:#04x} at address {:#06x}\n",
                 opcode,
