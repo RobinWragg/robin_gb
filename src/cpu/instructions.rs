@@ -164,7 +164,7 @@ pub fn inc_u8(value_to_increment: &mut u8, register_f: u8, elapsed_cycles: u8) -
     *value_to_increment = value_to_increment.wrapping_add(1);
 
     Finish2::new(1, elapsed_cycles)
-        .flag_z(*value_to_increment != 0)
+        .flag_z(*value_to_increment == 0)
         .flag_n(false)
         .flag_h(half_carry)
 }
@@ -277,7 +277,7 @@ pub fn dec_u8(value_to_dec: &mut u8, register_f: u8, elapsed_cycles: u8) -> Fini
     Finish2::new(1, elapsed_cycles)
         .flag_h(half_carry)
         .flag_n(true)
-        .flag_z(*value_to_dec != 0)
+        .flag_z(*value_to_dec == 0)
 }
 
 // rwtodo: having the params in order src,dst isn't idiomatic.
