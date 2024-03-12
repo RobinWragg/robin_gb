@@ -168,73 +168,33 @@ pub fn inc_u8(value_to_increment: &mut u8, register_f: u8, elapsed_cycles: u8) -
         .flag_h(half_carry)
 }
 
-pub fn xor(xor_input: u8, registers: &mut Registers, elapsed_cycles: u8) -> Finish {
-    registers.a ^= xor_input;
-
-    if registers.a == 0 {
-        registers.f |= Registers::FLAG_ZERO;
-    } else {
-        registers.f &= !Registers::FLAG_ZERO;
-    }
-
-    registers.f &= !Registers::FLAG_SUBTRACTION;
-    registers.f &= !Registers::FLAG_HALFCARRY;
-    registers.f &= !Registers::FLAG_CARRY;
-
-    Finish {
-        pc_increment: 1,
-        elapsed_cycles,
-    }
+pub fn xor(xor_input: u8, register_a: &mut u8, elapsed_cycles: u8) -> Finish2 {
+    *register_a ^= xor_input;
+    Finish2::new(1, elapsed_cycles)
+        .flag_z(*register_a == 0)
+        .flag_n(false)
+        .flag_h(false)
+        .flag_c(false)
 }
 
-pub fn or(
-    or_input: u8,
-    registers: &mut Registers,
-    pc_increment: i16,
-    elapsed_cycles: u8,
-) -> Finish {
+pub fn or(or_input: u8, register_a: &mut u8, pc_increment: i16, elapsed_cycles: u8) -> Finish2 {
     // rwtodo: I think pc_increment might always be 1, thereby allowing us to remove it as from the param list.
-
-    registers.a |= or_input;
-
-    if registers.a == 0 {
-        registers.f |= Registers::FLAG_ZERO;
-    } else {
-        registers.f &= !Registers::FLAG_ZERO;
-    }
-
-    registers.f &= !Registers::FLAG_SUBTRACTION;
-    registers.f &= !Registers::FLAG_HALFCARRY;
-    registers.f &= !Registers::FLAG_CARRY;
-
-    Finish {
-        pc_increment,
-        elapsed_cycles,
-    }
+    *register_a |= or_input;
+    Finish2::new(pc_increment, elapsed_cycles)
+        .flag_z(*register_a == 0)
+        .flag_n(false)
+        .flag_h(false)
+        .flag_c(false)
 }
 
-pub fn and(
-    and_input: u8,
-    registers: &mut Registers,
-    pc_increment: i16,
-    elapsed_cycles: u8,
-) -> Finish {
-    registers.a &= and_input;
+pub fn and(and_input: u8, register_a: &mut u8, pc_increment: i16, elapsed_cycles: u8) -> Finish2 {
+    *register_a &= and_input;
 
-    if registers.a == 0 {
-        registers.f |= Registers::FLAG_ZERO;
-    } else {
-        registers.f &= !Registers::FLAG_ZERO;
-    }
-
-    registers.f &= !Registers::FLAG_SUBTRACTION;
-    registers.f |= Registers::FLAG_HALFCARRY;
-    registers.f &= !Registers::FLAG_CARRY;
-
-    Finish {
-        pc_increment,
-        elapsed_cycles,
-    }
+    Finish2::new(pc_increment, elapsed_cycles)
+        .flag_z(*register_a == 0)
+        .flag_n(false)
+        .flag_h(true)
+        .flag_c(false)
 }
 
 fn set(bit_to_set: u8, byte_to_set: &mut u8, elapsed_cycles: u8) -> Finish {
@@ -398,33 +358,17 @@ pub fn sub(
     registers: &mut Registers,
     pc_increment: i16,
     elapsed_cycles: u8,
-) -> Finish {
-    if subtraction_produces_u8_half_carry(registers.a, sub_src, registers.f, false) {
-        registers.f |= Registers::FLAG_HALFCARRY;
-    } else {
-        registers.f &= !Registers::FLAG_HALFCARRY;
-    }
-
-    if subtraction_produces_u8_full_carry(registers.a, sub_src) {
-        registers.f |= Registers::FLAG_CARRY;
-    } else {
-        registers.f &= !Registers::FLAG_CARRY;
-    }
+) -> Finish2 {
+    let half_carry = subtraction_produces_u8_half_carry(registers.a, sub_src, registers.f, false);
+    let full_carry = subtraction_produces_u8_full_carry(registers.a, sub_src);
 
     registers.a -= sub_src;
 
-    if registers.a == 0 {
-        registers.f |= Registers::FLAG_ZERO;
-    } else {
-        registers.f &= !Registers::FLAG_ZERO;
-    }
-
-    registers.f |= Registers::FLAG_SUBTRACTION;
-
-    Finish {
-        pc_increment,
-        elapsed_cycles,
-    }
+    Finish2::new(pc_increment, elapsed_cycles)
+        .flag_z(registers.a == 0)
+        .flag_n(true)
+        .flag_h(half_carry)
+        .flag_c(full_carry)
 }
 
 pub fn sbc(
@@ -432,73 +376,38 @@ pub fn sbc(
     registers: &mut Registers,
     pc_increment: i16,
     elapsed_cycles: u8,
-) -> Finish {
+) -> Finish2 {
     let carry = if (registers.f & Registers::FLAG_CARRY) != 0 {
         1
     } else {
         0
     };
 
-    if subtraction_produces_u8_half_carry(registers.a, sub_src, registers.f, true) {
-        registers.f |= Registers::FLAG_HALFCARRY;
-    } else {
-        registers.f &= !Registers::FLAG_HALFCARRY;
-    }
-
-    if subtraction_produces_u8_full_carry(registers.a, sub_src + carry) {
-        registers.f |= Registers::FLAG_CARRY;
-    } else {
-        registers.f &= !Registers::FLAG_CARRY;
-    }
+    let half_carry = subtraction_produces_u8_half_carry(registers.a, sub_src, registers.f, true);
+    let full_carry = subtraction_produces_u8_full_carry(registers.a, sub_src + carry);
 
     registers.a -= sub_src + carry;
 
-    if registers.a == 0 {
-        registers.f |= Registers::FLAG_ZERO;
-    } else {
-        registers.f &= !Registers::FLAG_ZERO;
-    }
-
-    registers.f |= Registers::FLAG_SUBTRACTION;
-
-    Finish {
-        pc_increment,
-        elapsed_cycles,
-    }
+    Finish2::new(pc_increment, elapsed_cycles)
+        .flag_z(registers.a == 0)
+        .flag_n(true)
+        .flag_h(half_carry)
+        .flag_c(full_carry)
 }
 
-pub fn cp(
-    comparator: u8,
-    registers: &mut Registers,
-    pc_increment: i16,
-    elapsed_cycles: u8,
-) -> Finish {
-    if subtraction_produces_u8_half_carry(registers.a, comparator, registers.f, false) {
-        registers.f |= Registers::FLAG_HALFCARRY;
-    } else {
-        registers.f &= !Registers::FLAG_HALFCARRY;
-    }
-
-    if subtraction_produces_u8_full_carry(registers.a, comparator) {
-        registers.f |= Registers::FLAG_CARRY;
-    } else {
-        registers.f &= !Registers::FLAG_CARRY;
-    }
-
-    registers.f |= Registers::FLAG_SUBTRACTION; // Set the add/sub flag high, indicating subtraction.
+// rwtodo: I think this always increments pc by 1, so that param can be removed.
+pub fn cp(comparator: u8, registers: &Registers, pc_increment: i16, elapsed_cycles: u8) -> Finish2 {
+    let half_carry =
+        subtraction_produces_u8_half_carry(registers.a, comparator, registers.f, false);
+    let full_carry = subtraction_produces_u8_full_carry(registers.a, comparator);
 
     let sub_result: u8 = registers.a - comparator;
 
-    if sub_result == 0 {
-        registers.f |= Registers::FLAG_ZERO;
-    } else {
-        registers.f &= !Registers::FLAG_ZERO;
-    }
-
-    Finish {
-        pc_increment,
-        elapsed_cycles,
-    }
+    Finish2::new(pc_increment, elapsed_cycles)
+        .flag_z(sub_result == 0)
+        .flag_n(true)
+        .flag_h(half_carry)
+        .flag_c(full_carry)
 }
 
 pub fn rst(address_lower_byte: u8, registers: &mut Registers, memory: &mut Memory) -> Finish {
