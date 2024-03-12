@@ -2,7 +2,7 @@ use super::*;
 
 pub mod cb;
 
-pub struct FlagChanges {
+pub struct FlagDiff {
     pub z: Option<bool>,
     pub n: Option<bool>,
     pub h: Option<bool>,
@@ -11,7 +11,7 @@ pub struct FlagChanges {
 
 // rwtodo: Rename to 'Finish' when the original is fully removed.
 pub struct Finish2 {
-    pub flag_changes: FlagChanges,
+    pub flag_diff: FlagDiff,
     pub pc_increment: i16,
     pub elapsed_cycles: u8,
 }
@@ -21,7 +21,7 @@ impl Finish2 {
         Finish2 {
             pc_increment,
             elapsed_cycles,
-            flag_changes: FlagChanges {
+            flag_diff: FlagDiff {
                 z: None,
                 n: None,
                 h: None,
@@ -31,27 +31,27 @@ impl Finish2 {
     }
 
     pub fn flag_z(mut self, new_z: bool) -> Self {
-        self.flag_changes.z = Some(new_z);
+        self.flag_diff.z = Some(new_z);
         self
     }
 
     pub fn flag_n(mut self, new_n: bool) -> Self {
-        self.flag_changes.n = Some(new_n);
+        self.flag_diff.n = Some(new_n);
         self
     }
 
     pub fn flag_h(mut self, new_h: bool) -> Self {
-        self.flag_changes.h = Some(new_h);
+        self.flag_diff.h = Some(new_h);
         self
     }
 
     pub fn flag_c(mut self, new_c: bool) -> Self {
-        self.flag_changes.c = Some(new_c);
+        self.flag_diff.c = Some(new_c);
         self
     }
 }
 
-// rwtodo: Maybe these checks should return a FlagChanges.
+// rwtodo: Maybe these checks should return a FlagDiff.
 pub fn subtraction_produces_u8_full_carry(a: u8, b: u8) -> bool {
     i16::from(a) - i16::from(b) < 0
 }

@@ -4,7 +4,7 @@ use crate::address;
 use crate::interrupt;
 use crate::Memory;
 use crate::{bit, make_u16};
-use instructions::FlagChanges;
+use instructions::FlagDiff;
 
 // rwtodo: dang, I've got to check every - and + to ensure wraparounds.
 
@@ -129,7 +129,7 @@ impl Registers {
         }
     }
 
-    fn change_flags(&mut self, flag_changes: FlagChanges) {
+    fn update_flags(&mut self, flag_changes: FlagDiff) {
         if let Some(z) = flag_changes.z {
             if z {
                 self.f |= Self::FLAG_ZERO;
@@ -927,7 +927,7 @@ impl Cpu {
         };
 
         self.registers.pc = self.registers.pc.wrapping_add_signed(finish.pc_increment);
-        self.registers.change_flags(finish.flag_changes);
+        self.registers.update_flags(finish.flag_diff);
         finish.elapsed_cycles
     }
 }
