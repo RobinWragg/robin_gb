@@ -17,15 +17,15 @@ pub fn execute_cb_instruction(registers: &mut Registers, memory: &mut Memory) ->
     };
 
     let cycle_nybble = immediate_byte & 0x0f;
-    let elapsed_cycles = if cycle_nybble == 0x06 || cycle_nybble == 0x0e {
+    let cycles = if cycle_nybble == 0x06 || cycle_nybble == 0x0e {
         16
     } else {
         8
     };
     CpuDiff {
         flag_diff,
-        pc_increment: 2,
-        elapsed_cycles,
+        pc_delta: 2,
+        cycles,
     }
 }
 

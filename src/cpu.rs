@@ -218,9 +218,9 @@ impl Cpu {
 
     #[must_use] // Returns the number of cycles the instruction took.
     pub fn execute_next_instruction(&mut self, memory: &mut Memory) -> u8 {
-        let elapsed_cycles = self.execute_next_instruction_inner(memory);
+        let cycles = self.execute_next_instruction_inner(memory);
         self.handle_interrupt_requests(memory);
-        elapsed_cycles
+        cycles
     }
 
     #[must_use] // Returns the number of cycles the instruction took.
@@ -235,7 +235,7 @@ impl Cpu {
 
         use instructions::*;
 
-        let finish: CpuDiff = match opcode {
+        let diff: CpuDiff = match opcode {
             0x00 => nop(), // NOP
             0x01 => {
                 self.registers
@@ -276,9 +276,9 @@ impl Cpu {
             } // LD (xx),SP
             0x09 => {
                 let mut hl = self.registers.hl();
-                let finish = add_reg16(self.registers.bc(), &mut hl);
+                let diff = add_reg16(self.registers.bc(), &mut hl);
                 self.registers.set_hl(hl);
-                finish
+                diff
             } // ADD HL,BC
             0x0a => {
                 self.registers.a = memory.read(self.registers.bc());
@@ -318,9 +318,9 @@ impl Cpu {
             0x18 => CpuDiff::new(2 + i16::from(memory.read(self.registers.pc + 1) as i8), 12), // JR s
             0x19 => {
                 let mut hl = self.registers.hl();
-                let finish = add_reg16(self.registers.de(), &mut hl);
+                let diff = add_reg16(self.registers.de(), &mut hl);
                 self.registers.set_hl(hl);
-                finish
+                diff
             } // ADD HL,DE
             0x1a => {
                 self.registers.a = memory.read(self.registers.de());
@@ -398,9 +398,9 @@ impl Cpu {
             } // JR Z,s
             0x29 => {
                 let mut hl = self.registers.hl();
-                let finish = add_reg16(self.registers.hl(), &mut hl);
+                let diff = add_reg16(self.registers.hl(), &mut hl);
                 self.registers.set_hl(hl);
-                finish
+                diff
             } // ADD HL,HL
             0x2a => {
                 self.registers.a = memory.read(self.registers.hl());
@@ -436,15 +436,15 @@ impl Cpu {
             } // INC SP
             0x34 => {
                 let mut value_at_hl = memory.read(self.registers.hl());
-                let finish = inc_u8(&mut value_at_hl, self.registers.f, 12);
+                let diff = inc_u8(&mut value_at_hl, self.registers.f, 12);
                 memory.write(self.registers.hl(), value_at_hl);
-                finish
+                diff
             } // INC (HL)
             0x35 => {
                 let mut value_at_hl = memory.read(self.registers.hl());
-                let finish = dec_u8(&mut value_at_hl, self.registers.f, 12);
+                let diff = dec_u8(&mut value_at_hl, self.registers.f, 12);
                 memory.write(self.registers.hl(), value_at_hl);
-                finish
+                diff
             } // DEC (HL)
             0x36 => {
                 memory.write(self.registers.hl(), memory.read(self.registers.pc + 1));
@@ -460,9 +460,9 @@ impl Cpu {
             } // JR C,s
             0x39 => {
                 let mut hl = self.registers.hl();
-                let finish = add_reg16(self.registers.sp, &mut hl);
+                let diff = add_reg16(self.registers.sp, &mut hl);
                 self.registers.set_hl(hl);
-                finish
+                diff
             } // ADD HL,SP
             0x3a => {
                 self.registers.a = memory.read(self.registers.hl());
@@ -926,8 +926,8 @@ impl Cpu {
             ),
         };
 
-        self.registers.pc = self.registers.pc.wrapping_add_signed(finish.pc_increment);
-        self.registers.update_flags(finish.flag_diff);
-        finish.elapsed_cycles
+        self.registers.pc = self.registers.pc.wrapping_add_signed(diff.pc_delta);
+        self.registers.update_flags(diff.flag_diff);
+        diff.cycles
     }
 }

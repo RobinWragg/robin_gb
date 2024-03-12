@@ -9,18 +9,18 @@ pub struct FlagDiff {
     pub c: Option<bool>,
 }
 
-// rwtodo: Rename to 'Finish' when the original is fully removed.
+// rwtodo: documentation will be important here.
 pub struct CpuDiff {
     pub flag_diff: FlagDiff,
-    pub pc_increment: i16,
-    pub elapsed_cycles: u8,
+    pub pc_delta: i16,
+    pub cycles: u8,
 }
 
 impl CpuDiff {
-    pub fn new(pc_increment: i16, elapsed_cycles: u8) -> CpuDiff {
+    pub fn new(pc_delta: i16, cycles: u8) -> CpuDiff {
         CpuDiff {
-            pc_increment,
-            elapsed_cycles,
+            pc_delta,
+            cycles,
             flag_diff: FlagDiff {
                 z: None,
                 n: None,
@@ -153,39 +153,39 @@ pub fn print_instruction(pc: u16, memory: &mut Memory) {
     };
 }
 
-pub fn inc_u8(value_to_increment: &mut u8, register_f: u8, elapsed_cycles: u8) -> CpuDiff {
+pub fn inc_u8(value_to_increment: &mut u8, register_f: u8, cycles: u8) -> CpuDiff {
     let half_carry = addition_produces_u8_half_carry(*value_to_increment, 1, register_f, false);
     *value_to_increment = value_to_increment.wrapping_add(1);
 
-    CpuDiff::new(1, elapsed_cycles)
+    CpuDiff::new(1, cycles)
         .flag_z(*value_to_increment == 0)
         .flag_n(false)
         .flag_h(half_carry)
 }
 
-pub fn xor(xor_input: u8, register_a: &mut u8, elapsed_cycles: u8) -> CpuDiff {
+pub fn xor(xor_input: u8, register_a: &mut u8, cycles: u8) -> CpuDiff {
     *register_a ^= xor_input;
-    CpuDiff::new(1, elapsed_cycles)
+    CpuDiff::new(1, cycles)
         .flag_z(*register_a == 0)
         .flag_n(false)
         .flag_h(false)
         .flag_c(false)
 }
 
-pub fn or(or_input: u8, register_a: &mut u8, pc_increment: i16, elapsed_cycles: u8) -> CpuDiff {
-    // rwtodo: I think pc_increment might always be 1, thereby allowing us to remove it as from the param list.
+pub fn or(or_input: u8, register_a: &mut u8, pc_delta: i16, cycles: u8) -> CpuDiff {
+    // rwtodo: I think pc_delta might always be 1, thereby allowing us to remove it as from the param list.
     *register_a |= or_input;
-    CpuDiff::new(pc_increment, elapsed_cycles)
+    CpuDiff::new(pc_delta, cycles)
         .flag_z(*register_a == 0)
         .flag_n(false)
         .flag_h(false)
         .flag_c(false)
 }
 
-pub fn and(and_input: u8, register_a: &mut u8, pc_increment: i16, elapsed_cycles: u8) -> CpuDiff {
+pub fn and(and_input: u8, register_a: &mut u8, pc_delta: i16, cycles: u8) -> CpuDiff {
     *register_a &= and_input;
 
-    CpuDiff::new(pc_increment, elapsed_cycles)
+    CpuDiff::new(pc_delta, cycles)
         .flag_z(*register_a == 0)
         .flag_n(false)
         .flag_h(true)
@@ -209,12 +209,12 @@ pub fn nop() -> CpuDiff {
     CpuDiff::new(1, 4)
 }
 
-pub fn dec_u8(value_to_dec: &mut u8, register_f: u8, elapsed_cycles: u8) -> CpuDiff {
+pub fn dec_u8(value_to_dec: &mut u8, register_f: u8, cycles: u8) -> CpuDiff {
     let half_carry = subtraction_produces_u8_half_carry(*value_to_dec, 1, register_f, false);
 
     *value_to_dec = value_to_dec.wrapping_sub(1);
 
-    CpuDiff::new(1, elapsed_cycles)
+    CpuDiff::new(1, cycles)
         .flag_h(half_carry)
         .flag_n(true)
         .flag_z(*value_to_dec == 0)
@@ -245,30 +245,20 @@ pub fn call(condition: bool, registers: &mut Registers, memory: &mut Memory) -> 
 }
 
 // rwtodo: Can I reuse this for INC? and SUB for DEC?
-pub fn add_u8(
-    add_src: u8,
-    registers: &mut Registers,
-    pc_increment: i16,
-    elapsed_cycles: u8,
-) -> CpuDiff {
+pub fn add_u8(add_src: u8, registers: &mut Registers, pc_delta: i16, cycles: u8) -> CpuDiff {
     let half_carry = addition_produces_u8_half_carry(registers.a, add_src, registers.f, false);
     let full_carry = addition_produces_u8_full_carry(registers.a, add_src);
 
     registers.a = registers.a.wrapping_add(add_src);
 
-    CpuDiff::new(pc_increment, elapsed_cycles)
+    CpuDiff::new(pc_delta, cycles)
         .flag_z(registers.a == 0)
         .flag_n(false)
         .flag_h(half_carry)
         .flag_c(full_carry)
 }
 
-pub fn adc(
-    add_src: u8,
-    registers: &mut Registers,
-    pc_increment: i16,
-    elapsed_cycles: u8,
-) -> CpuDiff {
+pub fn adc(add_src: u8, registers: &mut Registers, pc_delta: i16, cycles: u8) -> CpuDiff {
     let carry_value = if (registers.f & Registers::FLAG_CARRY) != 0 {
         1
     } else {
@@ -280,37 +270,27 @@ pub fn adc(
 
     registers.a += add_src + carry_value;
 
-    CpuDiff::new(pc_increment, elapsed_cycles)
+    CpuDiff::new(pc_delta, cycles)
         .flag_h(half_carry_flag)
         .flag_c(full_carry_flag)
         .flag_z(registers.a == 0)
         .flag_n(false)
 }
 
-pub fn sub(
-    sub_src: u8,
-    registers: &mut Registers,
-    pc_increment: i16,
-    elapsed_cycles: u8,
-) -> CpuDiff {
+pub fn sub(sub_src: u8, registers: &mut Registers, pc_delta: i16, cycles: u8) -> CpuDiff {
     let half_carry = subtraction_produces_u8_half_carry(registers.a, sub_src, registers.f, false);
     let full_carry = subtraction_produces_u8_full_carry(registers.a, sub_src);
 
     registers.a -= sub_src;
 
-    CpuDiff::new(pc_increment, elapsed_cycles)
+    CpuDiff::new(pc_delta, cycles)
         .flag_z(registers.a == 0)
         .flag_n(true)
         .flag_h(half_carry)
         .flag_c(full_carry)
 }
 
-pub fn sbc(
-    sub_src: u8,
-    registers: &mut Registers,
-    pc_increment: i16,
-    elapsed_cycles: u8,
-) -> CpuDiff {
+pub fn sbc(sub_src: u8, registers: &mut Registers, pc_delta: i16, cycles: u8) -> CpuDiff {
     let carry = if (registers.f & Registers::FLAG_CARRY) != 0 {
         1
     } else {
@@ -322,7 +302,7 @@ pub fn sbc(
 
     registers.a -= sub_src + carry;
 
-    CpuDiff::new(pc_increment, elapsed_cycles)
+    CpuDiff::new(pc_delta, cycles)
         .flag_z(registers.a == 0)
         .flag_n(true)
         .flag_h(half_carry)
@@ -330,14 +310,14 @@ pub fn sbc(
 }
 
 // rwtodo: I think this always increments pc by 1, so that param can be removed.
-pub fn cp(comparator: u8, registers: &Registers, pc_increment: i16, elapsed_cycles: u8) -> CpuDiff {
+pub fn cp(comparator: u8, registers: &Registers, pc_delta: i16, cycles: u8) -> CpuDiff {
     let half_carry =
         subtraction_produces_u8_half_carry(registers.a, comparator, registers.f, false);
     let full_carry = subtraction_produces_u8_full_carry(registers.a, comparator);
 
     let sub_result: u8 = registers.a - comparator;
 
-    CpuDiff::new(pc_increment, elapsed_cycles)
+    CpuDiff::new(pc_delta, cycles)
         .flag_z(sub_result == 0)
         .flag_n(true)
         .flag_h(half_carry)
