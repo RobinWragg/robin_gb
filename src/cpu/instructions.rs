@@ -2,12 +2,6 @@ use super::*;
 
 pub mod cb;
 
-#[deprecated]
-pub struct Finish {
-    pub pc_increment: i16,
-    pub elapsed_cycles: u8,
-}
-
 pub struct FlagChanges {
     pub z: Option<bool>,
     pub n: Option<bool>,
@@ -196,60 +190,6 @@ pub fn and(and_input: u8, register_a: &mut u8, pc_increment: i16, elapsed_cycles
         .flag_n(false)
         .flag_h(true)
         .flag_c(false)
-}
-
-fn set(bit_to_set: u8, byte_to_set: &mut u8, elapsed_cycles: u8) -> Finish {
-    *byte_to_set |= 0x01 << bit_to_set;
-    Finish {
-        pc_increment: 1,
-        elapsed_cycles,
-    }
-}
-
-fn res(bit_to_reset: u8, byte_to_reset: &mut u8, elapsed_cycles: u8) -> Finish {
-    *byte_to_reset &= !(0x01 << bit_to_reset);
-    Finish {
-        pc_increment: 1,
-        elapsed_cycles,
-    }
-}
-
-fn bit(bit_to_check: u8, byte_to_check: u8, register_f: &mut u8, elapsed_cycles: u8) -> Finish {
-    if (byte_to_check & (0x01 << bit_to_check)) != 0 {
-        *register_f &= !Registers::FLAG_ZERO;
-    } else {
-        *register_f |= Registers::FLAG_ZERO;
-    }
-
-    *register_f &= !Registers::FLAG_SUBTRACTION;
-    *register_f |= Registers::FLAG_HALFCARRY;
-
-    Finish {
-        pc_increment: 1,
-        elapsed_cycles,
-    }
-}
-
-fn swap(byte_to_swap: &mut u8, register_f: &mut u8, elapsed_cycles: u8) -> Finish {
-    let upper_4_bits = *byte_to_swap & 0xf0;
-    let lower_4_bits = *byte_to_swap & 0x0f;
-    *byte_to_swap = upper_4_bits >> 4;
-    *byte_to_swap |= lower_4_bits << 4;
-
-    if *byte_to_swap == 0 {
-        *register_f |= Registers::FLAG_ZERO;
-    } else {
-        *register_f &= !Registers::FLAG_ZERO;
-    }
-
-    *register_f &= !Registers::FLAG_SUBTRACTION;
-    *register_f &= !Registers::FLAG_HALFCARRY;
-    *register_f &= !Registers::FLAG_CARRY;
-
-    Finish {
-        pc_increment: 1,
-        elapsed_cycles,
-    }
 }
 
 pub fn ld_reg8_mem8(dst_register: &mut u8, src_memory: u8) -> Finish2 {
