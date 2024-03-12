@@ -10,15 +10,15 @@ pub struct FlagDiff {
 }
 
 // rwtodo: Rename to 'Finish' when the original is fully removed.
-pub struct Finish2 {
+pub struct CpuDiff {
     pub flag_diff: FlagDiff,
     pub pc_increment: i16,
     pub elapsed_cycles: u8,
 }
 
-impl Finish2 {
-    pub fn new(pc_increment: i16, elapsed_cycles: u8) -> Finish2 {
-        Finish2 {
+impl CpuDiff {
+    pub fn new(pc_increment: i16, elapsed_cycles: u8) -> CpuDiff {
+        CpuDiff {
             pc_increment,
             elapsed_cycles,
             flag_diff: FlagDiff {
@@ -153,94 +153,94 @@ pub fn print_instruction(pc: u16, memory: &mut Memory) {
     };
 }
 
-pub fn inc_u8(value_to_increment: &mut u8, register_f: u8, elapsed_cycles: u8) -> Finish2 {
+pub fn inc_u8(value_to_increment: &mut u8, register_f: u8, elapsed_cycles: u8) -> CpuDiff {
     let half_carry = addition_produces_u8_half_carry(*value_to_increment, 1, register_f, false);
     *value_to_increment = value_to_increment.wrapping_add(1);
 
-    Finish2::new(1, elapsed_cycles)
+    CpuDiff::new(1, elapsed_cycles)
         .flag_z(*value_to_increment == 0)
         .flag_n(false)
         .flag_h(half_carry)
 }
 
-pub fn xor(xor_input: u8, register_a: &mut u8, elapsed_cycles: u8) -> Finish2 {
+pub fn xor(xor_input: u8, register_a: &mut u8, elapsed_cycles: u8) -> CpuDiff {
     *register_a ^= xor_input;
-    Finish2::new(1, elapsed_cycles)
+    CpuDiff::new(1, elapsed_cycles)
         .flag_z(*register_a == 0)
         .flag_n(false)
         .flag_h(false)
         .flag_c(false)
 }
 
-pub fn or(or_input: u8, register_a: &mut u8, pc_increment: i16, elapsed_cycles: u8) -> Finish2 {
+pub fn or(or_input: u8, register_a: &mut u8, pc_increment: i16, elapsed_cycles: u8) -> CpuDiff {
     // rwtodo: I think pc_increment might always be 1, thereby allowing us to remove it as from the param list.
     *register_a |= or_input;
-    Finish2::new(pc_increment, elapsed_cycles)
+    CpuDiff::new(pc_increment, elapsed_cycles)
         .flag_z(*register_a == 0)
         .flag_n(false)
         .flag_h(false)
         .flag_c(false)
 }
 
-pub fn and(and_input: u8, register_a: &mut u8, pc_increment: i16, elapsed_cycles: u8) -> Finish2 {
+pub fn and(and_input: u8, register_a: &mut u8, pc_increment: i16, elapsed_cycles: u8) -> CpuDiff {
     *register_a &= and_input;
 
-    Finish2::new(pc_increment, elapsed_cycles)
+    CpuDiff::new(pc_increment, elapsed_cycles)
         .flag_z(*register_a == 0)
         .flag_n(false)
         .flag_h(true)
         .flag_c(false)
 }
 
-pub fn ld_reg8_mem8(dst_register: &mut u8, src_memory: u8) -> Finish2 {
+pub fn ld_reg8_mem8(dst_register: &mut u8, src_memory: u8) -> CpuDiff {
     *dst_register = src_memory;
-    Finish2::new(2, 8)
+    CpuDiff::new(2, 8)
 }
 
-pub fn ld_reg8_reg8(dst_register: &mut u8, src_register: u8) -> Finish2 {
+pub fn ld_reg8_reg8(dst_register: &mut u8, src_register: u8) -> CpuDiff {
     *dst_register = src_register;
 
     // Same as NOP, as LD B,B is a de facto NOP.
-    Finish2::new(1, 4)
+    CpuDiff::new(1, 4)
 }
 
-pub fn nop() -> Finish2 {
+pub fn nop() -> CpuDiff {
     // Same as ld_reg8_reg8
-    Finish2::new(1, 4)
+    CpuDiff::new(1, 4)
 }
 
-pub fn dec_u8(value_to_dec: &mut u8, register_f: u8, elapsed_cycles: u8) -> Finish2 {
+pub fn dec_u8(value_to_dec: &mut u8, register_f: u8, elapsed_cycles: u8) -> CpuDiff {
     let half_carry = subtraction_produces_u8_half_carry(*value_to_dec, 1, register_f, false);
 
     *value_to_dec = value_to_dec.wrapping_sub(1);
 
-    Finish2::new(1, elapsed_cycles)
+    CpuDiff::new(1, elapsed_cycles)
         .flag_h(half_carry)
         .flag_n(true)
         .flag_z(*value_to_dec == 0)
 }
 
 // rwtodo: having the params in order src,dst isn't idiomatic.
-pub fn add_reg16(src: u16, dst_register: &mut u16) -> Finish2 {
+pub fn add_reg16(src: u16, dst_register: &mut u16) -> CpuDiff {
     // Check for 16-bit full- and half-carry
     let full_carry = i32::from(*dst_register) + i32::from(src) > 0xffff;
     let half_carry = (*dst_register & 0x0fff) + (src & 0x0fff) > 0x0fff;
 
     *dst_register = dst_register.wrapping_add(src);
 
-    Finish2::new(1, 8)
+    CpuDiff::new(1, 8)
         .flag_n(false)
         .flag_h(half_carry)
         .flag_c(full_carry)
 }
 
-pub fn call(condition: bool, registers: &mut Registers, memory: &mut Memory) -> Finish2 {
+pub fn call(condition: bool, registers: &mut Registers, memory: &mut Memory) -> CpuDiff {
     if condition {
         stack_push(registers.pc + 3, &mut registers.sp, memory);
         registers.pc = memory.read_u16(registers.pc + 1);
-        Finish2::new(0, 24)
+        CpuDiff::new(0, 24)
     } else {
-        Finish2::new(3, 12)
+        CpuDiff::new(3, 12)
     }
 }
 
@@ -250,13 +250,13 @@ pub fn add_u8(
     registers: &mut Registers,
     pc_increment: i16,
     elapsed_cycles: u8,
-) -> Finish2 {
+) -> CpuDiff {
     let half_carry = addition_produces_u8_half_carry(registers.a, add_src, registers.f, false);
     let full_carry = addition_produces_u8_full_carry(registers.a, add_src);
 
     registers.a = registers.a.wrapping_add(add_src);
 
-    Finish2::new(pc_increment, elapsed_cycles)
+    CpuDiff::new(pc_increment, elapsed_cycles)
         .flag_z(registers.a == 0)
         .flag_n(false)
         .flag_h(half_carry)
@@ -268,7 +268,7 @@ pub fn adc(
     registers: &mut Registers,
     pc_increment: i16,
     elapsed_cycles: u8,
-) -> Finish2 {
+) -> CpuDiff {
     let carry_value = if (registers.f & Registers::FLAG_CARRY) != 0 {
         1
     } else {
@@ -280,7 +280,7 @@ pub fn adc(
 
     registers.a += add_src + carry_value;
 
-    Finish2::new(pc_increment, elapsed_cycles)
+    CpuDiff::new(pc_increment, elapsed_cycles)
         .flag_h(half_carry_flag)
         .flag_c(full_carry_flag)
         .flag_z(registers.a == 0)
@@ -292,13 +292,13 @@ pub fn sub(
     registers: &mut Registers,
     pc_increment: i16,
     elapsed_cycles: u8,
-) -> Finish2 {
+) -> CpuDiff {
     let half_carry = subtraction_produces_u8_half_carry(registers.a, sub_src, registers.f, false);
     let full_carry = subtraction_produces_u8_full_carry(registers.a, sub_src);
 
     registers.a -= sub_src;
 
-    Finish2::new(pc_increment, elapsed_cycles)
+    CpuDiff::new(pc_increment, elapsed_cycles)
         .flag_z(registers.a == 0)
         .flag_n(true)
         .flag_h(half_carry)
@@ -310,7 +310,7 @@ pub fn sbc(
     registers: &mut Registers,
     pc_increment: i16,
     elapsed_cycles: u8,
-) -> Finish2 {
+) -> CpuDiff {
     let carry = if (registers.f & Registers::FLAG_CARRY) != 0 {
         1
     } else {
@@ -322,7 +322,7 @@ pub fn sbc(
 
     registers.a -= sub_src + carry;
 
-    Finish2::new(pc_increment, elapsed_cycles)
+    CpuDiff::new(pc_increment, elapsed_cycles)
         .flag_z(registers.a == 0)
         .flag_n(true)
         .flag_h(half_carry)
@@ -330,22 +330,22 @@ pub fn sbc(
 }
 
 // rwtodo: I think this always increments pc by 1, so that param can be removed.
-pub fn cp(comparator: u8, registers: &Registers, pc_increment: i16, elapsed_cycles: u8) -> Finish2 {
+pub fn cp(comparator: u8, registers: &Registers, pc_increment: i16, elapsed_cycles: u8) -> CpuDiff {
     let half_carry =
         subtraction_produces_u8_half_carry(registers.a, comparator, registers.f, false);
     let full_carry = subtraction_produces_u8_full_carry(registers.a, comparator);
 
     let sub_result: u8 = registers.a - comparator;
 
-    Finish2::new(pc_increment, elapsed_cycles)
+    CpuDiff::new(pc_increment, elapsed_cycles)
         .flag_z(sub_result == 0)
         .flag_n(true)
         .flag_h(half_carry)
         .flag_c(full_carry)
 }
 
-pub fn rst(address_lower_byte: u8, registers: &mut Registers, memory: &mut Memory) -> Finish2 {
+pub fn rst(address_lower_byte: u8, registers: &mut Registers, memory: &mut Memory) -> CpuDiff {
     stack_push(registers.pc + 1, &mut registers.sp, memory);
     registers.pc = address_lower_byte.into();
-    Finish2::new(0, 16)
+    CpuDiff::new(0, 16)
 }
