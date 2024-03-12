@@ -129,7 +129,7 @@ impl Registers {
         }
     }
 
-    fn change_flags(&mut self, flag_changes: &FlagChanges) {
+    fn change_flags(&mut self, flag_changes: FlagChanges) {
         if let Some(z) = flag_changes.z {
             if z {
                 self.f |= Self::FLAG_ZERO;
@@ -235,101 +235,73 @@ impl Cpu {
 
         use instructions::*;
 
-        let finish: Finish = match opcode {
+        let finish: Finish2 = match opcode {
             0x00 => nop(), // NOP
             0x01 => {
                 self.registers
                     .set_bc(memory.read_u16(self.registers.pc + 1));
-                Finish {
-                    pc_increment: 3,
-                    elapsed_cycles: 12,
-                }
+                Finish2::new(3, 12)
             } // LD BC,xx
             0x02 => {
                 memory.write(self.registers.bc(), self.registers.a);
-                Finish {
-                    pc_increment: 1,
-                    elapsed_cycles: 8,
-                }
+                Finish2::new(1, 8)
             } // LD (BC),A
             0x03 => {
                 self.registers.set_bc(self.registers.bc() + 1);
-                Finish {
-                    pc_increment: 1,
-                    elapsed_cycles: 8,
-                }
+                Finish2::new(1, 8)
             } // INC BC
-            0x04 => inc_u8(&mut self.registers.b, &mut self.registers.f, 4), // INC B
-            0x05 => dec_u8(&mut self.registers.b, &mut self.registers.f, 4), // DEC B
+            0x04 => inc_u8(&mut self.registers.b, self.registers.f, 4), // INC B
+            0x05 => dec_u8(&mut self.registers.b, self.registers.f, 4), // DEC B
             0x06 => ld_reg8_mem8(&mut self.registers.b, memory.read(self.registers.pc + 1)), // LD B,x
             0x07 => {
-                if self.registers.a & bit(7) != 0 {
-                    self.registers.f |= Registers::FLAG_CARRY;
+                let bit_7 = self.registers.a & bit(7) != 0;
+
+                if bit_7 {
                     self.registers.a <<= 1;
                     self.registers.a |= bit(0);
                 } else {
-                    self.registers.f &= !Registers::FLAG_CARRY;
                     self.registers.a <<= 1;
                     self.registers.a &= !bit(0);
                 }
 
-                self.registers.f &= !Registers::FLAG_ZERO;
-                self.registers.f &= !Registers::FLAG_SUBTRACTION;
-                self.registers.f &= !Registers::FLAG_HALFCARRY;
-                Finish {
-                    pc_increment: 1,
-                    elapsed_cycles: 4,
-                }
+                Finish2::new(1, 4)
+                    .flag_z(false)
+                    .flag_n(false)
+                    .flag_h(false)
+                    .flag_c(bit_7)
             } // RLCA
             0x08 => {
                 memory.write_u16(memory.read_u16(self.registers.pc + 1), self.registers.sp);
-                Finish {
-                    pc_increment: 3,
-                    elapsed_cycles: 20,
-                }
+                Finish2::new(3, 20)
             } // LD (xx),SP
             0x09 => {
                 let mut hl = self.registers.hl();
-                let finish = add_reg16(self.registers.bc(), &mut hl, &mut self.registers.f);
+                let finish = add_reg16(self.registers.bc(), &mut hl);
                 self.registers.set_hl(hl);
                 finish
             } // ADD HL,BC
             0x0a => {
                 self.registers.a = memory.read(self.registers.bc());
-                Finish {
-                    pc_increment: 1,
-                    elapsed_cycles: 8,
-                }
+                Finish2::new(1, 8)
             } // LD A,(BC)
             0x0b => {
                 let bc = self.registers.bc().wrapping_sub(1);
                 self.registers.set_bc(bc);
-                Finish {
-                    pc_increment: 1,
-                    elapsed_cycles: 8,
-                }
+                Finish2::new(1, 8)
             } // DEC BC
-            0x0c => inc_u8(&mut self.registers.c, &mut self.registers.f, 4), // INC C
-            0x0d => dec_u8(&mut self.registers.c, &mut self.registers.f, 4), // DEC C
+            0x0c => inc_u8(&mut self.registers.c, self.registers.f, 4), // INC C
+            0x0d => dec_u8(&mut self.registers.c, self.registers.f, 4), // DEC C
             0x0e => ld_reg8_mem8(&mut self.registers.c, memory.read(self.registers.pc + 1)), // LD C,x
             0x11 => {
                 self.registers
                     .set_de(memory.read_u16(self.registers.pc + 1));
-                Finish {
-                    pc_increment: 3,
-                    elapsed_cycles: 12,
-                }
+                Finish2::new(3, 12)
             } // LD DE,xx
-            0x15 => dec_u8(&mut self.registers.d, &mut self.registers.f, 4), // DEC D
+            0x15 => dec_u8(&mut self.registers.d, self.registers.f, 4), // DEC D
             0x16 => ld_reg8_mem8(&mut self.registers.d, memory.read(self.registers.pc + 1)), // LD D,x
             0x17 => {
                 let previous_carry = self.registers.f & Registers::FLAG_CARRY != 0;
-
-                if self.registers.a & bit(7) != 0 {
-                    self.registers.f |= Registers::FLAG_CARRY;
-                } else {
-                    self.registers.f &= !Registers::FLAG_CARRY;
-                }
+                let bit_7 = self.registers.a & bit(7) != 0;
 
                 self.registers.a = self.registers.a << 1;
 
@@ -337,80 +309,53 @@ impl Cpu {
                     self.registers.a |= bit(0);
                 }
 
-                self.registers.f &= !Registers::FLAG_ZERO;
-                self.registers.f &= !Registers::FLAG_SUBTRACTION;
-                self.registers.f &= !Registers::FLAG_HALFCARRY;
-
-                Finish {
-                    pc_increment: 1,
-                    elapsed_cycles: 4,
-                }
+                Finish2::new(1, 4)
+                    .flag_z(false)
+                    .flag_n(false)
+                    .flag_h(false)
+                    .flag_c(bit_7)
             } // RLA
-            0x18 => Finish {
-                pc_increment: 2 + i16::from(memory.read(self.registers.pc + 1) as i8),
-                elapsed_cycles: 12,
-            }, // JR s
+            0x18 => Finish2::new(2 + i16::from(memory.read(self.registers.pc + 1) as i8), 12), // JR s
             0x19 => {
                 let mut hl = self.registers.hl();
-                let finish = add_reg16(self.registers.de(), &mut hl, &mut self.registers.f);
+                let finish = add_reg16(self.registers.de(), &mut hl);
                 self.registers.set_hl(hl);
                 finish
             } // ADD HL,DE
             0x1a => {
                 self.registers.a = memory.read(self.registers.de());
-                Finish {
-                    pc_increment: 1,
-                    elapsed_cycles: 8,
-                }
+                Finish2::new(1, 8)
             } // LD A,(DE)
             0x1b => {
                 self.registers.set_de(self.registers.de() - 1);
-                Finish {
-                    pc_increment: 1,
-                    elapsed_cycles: 8,
-                }
+                Finish2::new(1, 8)
             } // DEC DE
-            0x1c => inc_u8(&mut self.registers.e, &mut self.registers.f, 4), // INC E
-            0x1d => dec_u8(&mut self.registers.e, &mut self.registers.f, 4), // DEC E
+            0x1c => inc_u8(&mut self.registers.e, self.registers.f, 4), // INC E
+            0x1d => dec_u8(&mut self.registers.e, self.registers.f, 4), // DEC E
             0x1e => ld_reg8_mem8(&mut self.registers.e, memory.read(self.registers.pc + 1)), // LD E,x
             0x20 => {
                 if (self.registers.f & Registers::FLAG_ZERO) == 0 {
-                    Finish {
-                        pc_increment: 2 + i16::from(memory.read(self.registers.pc + 1) as i8),
-                        elapsed_cycles: 12,
-                    }
+                    Finish2::new(2 + i16::from(memory.read(self.registers.pc + 1) as i8), 12)
                 } else {
-                    Finish {
-                        pc_increment: 2,
-                        elapsed_cycles: 8,
-                    }
+                    Finish2::new(2, 8)
                 }
             } // JR NZ,s
             0x21 => {
                 self.registers
                     .set_hl(memory.read_u16(self.registers.pc + 1));
-                Finish {
-                    pc_increment: 3,
-                    elapsed_cycles: 12,
-                }
+                Finish2::new(3, 12)
             } // LD HL,xx
             0x22 => {
                 memory.write(self.registers.hl(), self.registers.a);
                 self.registers.set_hl(self.registers.hl() + 1);
-                Finish {
-                    pc_increment: 1,
-                    elapsed_cycles: 8,
-                }
+                Finish2::new(1, 8)
             } // LD (HL+),A
             0x23 => {
                 self.registers.set_hl(self.registers.hl() + 1);
-                Finish {
-                    pc_increment: 1,
-                    elapsed_cycles: 8,
-                }
+                Finish2::new(1, 8)
             } // INC HL
-            0x24 => inc_u8(&mut self.registers.h, &mut self.registers.f, 4), // INC H
-            0x25 => dec_u8(&mut self.registers.h, &mut self.registers.f, 4), // DEC H
+            0x24 => inc_u8(&mut self.registers.h, self.registers.f, 4), // INC H
+            0x25 => dec_u8(&mut self.registers.h, self.registers.f, 4), // DEC H
             0x26 => ld_reg8_mem8(&mut self.registers.h, memory.read(self.registers.pc + 1)), // LD H,x
             0x27 => {
                 let mut new_a: u16 = self.registers.a.into();
@@ -438,158 +383,105 @@ impl Cpu {
 
                 self.registers.a = new_a as u8;
 
-                self.registers.f &= !(Registers::FLAG_HALFCARRY | Registers::FLAG_ZERO);
-                if new_a & 0x100 != 0 {
-                    self.registers.f |= Registers::FLAG_CARRY;
-                }
-                if self.registers.a == 0 {
-                    self.registers.f |= Registers::FLAG_ZERO;
-                }
-
-                Finish {
-                    pc_increment: 1,
-                    elapsed_cycles: 4,
-                }
+                Finish2::new(1, 4)
+                    .flag_z(self.registers.a == 0)
+                    .flag_h(false)
+                    .flag_c(new_a & 0x100 != 0)
             } // DAA
             0x28 => {
                 if self.registers.f & Registers::FLAG_ZERO == 0 {
                     let x = memory.read(self.registers.pc + 1) as i8;
-                    Finish {
-                        pc_increment: (2 + x).into(),
-                        elapsed_cycles: 12,
-                    }
+                    Finish2::new((2 + x).into(), 12)
                 } else {
-                    Finish {
-                        pc_increment: 2,
-                        elapsed_cycles: 8,
-                    }
+                    Finish2::new(2, 8)
                 }
             } // JR Z,s
             0x29 => {
                 let mut hl = self.registers.hl();
-                let finish = add_reg16(self.registers.hl(), &mut hl, &mut self.registers.f);
+                let finish = add_reg16(self.registers.hl(), &mut hl);
                 self.registers.set_hl(hl);
                 finish
             } // ADD HL,HL
             0x2a => {
                 self.registers.a = memory.read(self.registers.hl());
                 self.registers.set_hl(self.registers.hl() + 1);
-                Finish {
-                    pc_increment: 1,
-                    elapsed_cycles: 8,
-                }
+                Finish2::new(1, 8)
             } // LD A,(HL+)
-            0x2c => inc_u8(&mut self.registers.l, &mut self.registers.f, 4), // INC L
-            0x2d => dec_u8(&mut self.registers.l, &mut self.registers.f, 4), // DEC L
+            0x2c => inc_u8(&mut self.registers.l, self.registers.f, 4), // INC L
+            0x2d => dec_u8(&mut self.registers.l, self.registers.f, 4), // DEC L
             0x2e => ld_reg8_mem8(&mut self.registers.l, memory.read(self.registers.pc + 1)), // LD L,x
             0x2f => {
                 self.registers.a ^= 0xff;
                 self.registers.f |= Registers::FLAG_SUBTRACTION;
                 self.registers.f |= Registers::FLAG_HALFCARRY;
-                Finish {
-                    pc_increment: 1,
-                    elapsed_cycles: 4,
-                }
+                Finish2::new(1, 4)
             } // CPL
             0x30 => {
                 if (self.registers.f & Registers::FLAG_CARRY) == 0 {
-                    Finish {
-                        pc_increment: 2 + i16::from(memory.read(self.registers.pc + 1) as i8),
-                        elapsed_cycles: 12,
-                    }
+                    Finish2::new(2 + i16::from(memory.read(self.registers.pc + 1) as i8), 12)
                 } else {
-                    Finish {
-                        pc_increment: 2,
-                        elapsed_cycles: 8,
-                    }
+                    Finish2::new(2, 8)
                 }
             } // JR NC,s
             0x31 => {
                 self.registers.sp = memory.read_u16(self.registers.pc + 1);
-                Finish {
-                    pc_increment: 3,
-                    elapsed_cycles: 12,
-                }
+                Finish2::new(3, 12)
             } // LD SP,xx
             0x32 => {
                 memory.write(self.registers.hl(), self.registers.a);
                 self.registers.set_hl(self.registers.hl() - 1);
-                Finish {
-                    pc_increment: 1,
-                    elapsed_cycles: 8,
-                }
+                Finish2::new(1, 8)
             } // LD (HL-),A
             0x33 => {
                 self.registers.sp += 1;
-                Finish {
-                    pc_increment: 1,
-                    elapsed_cycles: 8,
-                }
+                Finish2::new(1, 8)
             } // INC SP
             0x34 => {
                 let mut value_at_hl = memory.read(self.registers.hl());
-                let finish = inc_u8(&mut value_at_hl, &mut self.registers.f, 12);
+                let finish = inc_u8(&mut value_at_hl, self.registers.f, 12);
                 memory.write(self.registers.hl(), value_at_hl);
                 finish
             } // INC (HL)
             0x35 => {
                 let mut value_at_hl = memory.read(self.registers.hl());
-                let finish = dec_u8(&mut value_at_hl, &mut self.registers.f, 12);
+                let finish = dec_u8(&mut value_at_hl, self.registers.f, 12);
                 memory.write(self.registers.hl(), value_at_hl);
                 finish
             } // DEC (HL)
             0x36 => {
                 memory.write(self.registers.hl(), memory.read(self.registers.pc + 1));
-                Finish {
-                    pc_increment: 2,
-                    elapsed_cycles: 12,
-                }
+                Finish2::new(2, 12)
             } // LD (HL),x
             0x37 => {
                 self.registers.f &= !Registers::FLAG_SUBTRACTION;
                 self.registers.f &= !Registers::FLAG_HALFCARRY;
                 self.registers.f |= Registers::FLAG_CARRY;
-                Finish {
-                    pc_increment: 1,
-                    elapsed_cycles: 4,
-                }
+                Finish2::new(1, 4)
             } // SCF
             0x38 => {
                 if self.registers.f & Registers::FLAG_CARRY != 0 {
-                    Finish {
-                        pc_increment: 2 + i16::from(memory.read(self.registers.pc + 1) as i8),
-                        elapsed_cycles: 12,
-                    }
+                    Finish2::new(2 + i16::from(memory.read(self.registers.pc + 1) as i8), 12)
                 } else {
-                    Finish {
-                        pc_increment: 2,
-                        elapsed_cycles: 8,
-                    }
+                    Finish2::new(2, 8)
                 }
             } // JR C,s
             0x39 => {
                 let mut hl = self.registers.hl();
-                let finish = add_reg16(self.registers.sp, &mut hl, &mut self.registers.f);
+                let finish = add_reg16(self.registers.sp, &mut hl);
                 self.registers.set_hl(hl);
                 finish
             } // ADD HL,SP
             0x3a => {
                 self.registers.a = memory.read(self.registers.hl());
                 self.registers.set_hl(self.registers.hl() - 1);
-                Finish {
-                    pc_increment: 1,
-                    elapsed_cycles: 8,
-                }
+                Finish2::new(1, 8)
             } // LD A,(HL-)
             0x3b => {
                 self.registers.sp -= 1;
-                Finish {
-                    pc_increment: 1,
-                    elapsed_cycles: 8,
-                }
+                Finish2::new(1, 8)
             } // DEC SP
-            0x3c => inc_u8(&mut self.registers.a, &mut self.registers.f, 4), // INC A
-            0x3d => dec_u8(&mut self.registers.a, &mut self.registers.f, 4), // DEC A
+            0x3c => inc_u8(&mut self.registers.a, self.registers.f, 4), // INC A
+            0x3d => dec_u8(&mut self.registers.a, self.registers.f, 4), // DEC A
             0x3e => ld_reg8_mem8(&mut self.registers.a, memory.read(self.registers.pc + 1)), // LD A,x
             0x40 => nop(),                                                 // LD B,B
             0x41 => ld_reg8_reg8(&mut self.registers.b, self.registers.c), // LD B,C
@@ -635,108 +527,63 @@ impl Cpu {
             0x6f => ld_reg8_reg8(&mut self.registers.l, self.registers.a), // LD L,A
             0x70 => {
                 memory.write(self.registers.hl(), self.registers.b);
-                Finish {
-                    pc_increment: 1,
-                    elapsed_cycles: 8,
-                }
+                Finish2::new(1, 8)
             } // LD (HL),B
             0x71 => {
                 memory.write(self.registers.hl(), self.registers.c);
-                Finish {
-                    pc_increment: 1,
-                    elapsed_cycles: 8,
-                }
+                Finish2::new(1, 8)
             } // LD (HL),C
             0x72 => {
                 memory.write(self.registers.hl(), self.registers.d);
-                Finish {
-                    pc_increment: 1,
-                    elapsed_cycles: 8,
-                }
+                Finish2::new(1, 8)
             } // LD (HL),D
             0x73 => {
                 memory.write(self.registers.hl(), self.registers.e);
-                Finish {
-                    pc_increment: 1,
-                    elapsed_cycles: 8,
-                }
+                Finish2::new(1, 8)
             } // LD (HL),E
             0x74 => {
                 memory.write(self.registers.hl(), self.registers.h);
-                Finish {
-                    pc_increment: 1,
-                    elapsed_cycles: 8,
-                }
+                Finish2::new(1, 8)
             } // LD (HL),H
             0x75 => {
                 memory.write(self.registers.hl(), self.registers.l);
-                Finish {
-                    pc_increment: 1,
-                    elapsed_cycles: 8,
-                }
+                Finish2::new(1, 8)
             } // LD (HL),L
             0x77 => {
                 memory.write(self.registers.hl(), self.registers.a);
-                Finish {
-                    pc_increment: 1,
-                    elapsed_cycles: 8,
-                }
+                Finish2::new(1, 8)
             } // LD (HL),A
             0x78 => {
                 self.registers.a = self.registers.b;
-                Finish {
-                    pc_increment: 1,
-                    elapsed_cycles: 4,
-                }
+                Finish2::new(1, 4)
             } // LD A,B
             0x79 => {
                 self.registers.a = self.registers.c;
-                Finish {
-                    pc_increment: 1,
-                    elapsed_cycles: 4,
-                }
+                Finish2::new(1, 4)
             } // LD A,C
             0x7a => {
                 self.registers.a = self.registers.d;
-                Finish {
-                    pc_increment: 1,
-                    elapsed_cycles: 4,
-                }
+                Finish2::new(1, 4)
             } // LD A,D
             0x7b => {
                 self.registers.a = self.registers.e;
-                Finish {
-                    pc_increment: 1,
-                    elapsed_cycles: 4,
-                }
+                Finish2::new(1, 4)
             } // LD A,E
             0x7c => {
                 self.registers.a = self.registers.h;
-                Finish {
-                    pc_increment: 1,
-                    elapsed_cycles: 4,
-                }
+                Finish2::new(1, 4)
             } // LD A,H
             0x7d => {
                 self.registers.a = self.registers.l;
-                Finish {
-                    pc_increment: 1,
-                    elapsed_cycles: 4,
-                }
+                Finish2::new(1, 4)
             } // LD A,L
             0x7e => {
                 self.registers.a = memory.read(self.registers.hl());
-                Finish {
-                    pc_increment: 1,
-                    elapsed_cycles: 8,
-                }
+                Finish2::new(1, 8)
             } // LD A,(HL)
             0x7f => {
                 self.registers.a = self.registers.a;
-                Finish {
-                    pc_increment: 1,
-                    elapsed_cycles: 4,
-                }
+                Finish2::new(1, 4)
             } // LD A,A
             0x80 => add_u8(self.registers.b, &mut self.registers, 1, 4),   // ADD A,B
             0x81 => add_u8(self.registers.c, &mut self.registers, 1, 4),   // ADD A,C
@@ -754,474 +601,474 @@ impl Cpu {
             0x8d => adc(self.registers.l, &mut self.registers, 1, 4),                    // ADC A,L
             0x8e => adc(memory.read(self.registers.hl()), &mut self.registers, 1, 8), // ADC A,(HL)
             0x8f => adc(self.registers.a, &mut self.registers, 1, 4),                 // ADC A,A
-            0x90 => sub(self.registers.b, &mut self.registers, 1, 4),                 // SUB B
-            0x91 => sub(self.registers.c, &mut self.registers, 1, 4),                 // SUB C
-            0x92 => sub(self.registers.d, &mut self.registers, 1, 4),                 // SUB D
-            0x93 => sub(self.registers.e, &mut self.registers, 1, 4),                 // SUB E
-            0x94 => sub(self.registers.h, &mut self.registers, 1, 4),                 // SUB H
-            0x95 => sub(self.registers.l, &mut self.registers, 1, 4),                 // SUB L
-            0x96 => sub(memory.read(self.registers.hl()), &mut self.registers, 1, 8), // SUB (HL)
-            0x97 => sub(self.registers.a, &mut self.registers, 1, 4),                 // SUB A
-            0x98 => sbc(self.registers.b, &mut self.registers, 1, 4),                 // SBC A,B
-            0x99 => sbc(self.registers.c, &mut self.registers, 1, 4),                 // SBC A,C
-            0x9a => sbc(self.registers.d, &mut self.registers, 1, 4),                 // SBC A,D
-            0x9b => sbc(self.registers.e, &mut self.registers, 1, 4),                 // SBC A,E
-            0x9c => sbc(self.registers.h, &mut self.registers, 1, 4),                 // SBC A,H
-            0x9d => sbc(self.registers.l, &mut self.registers, 1, 4),                 // SBC A,L
-            0x9e => sbc(memory.read(self.registers.hl()), &mut self.registers, 1, 8), // SBC A,(HL)
-            0x9f => sbc(self.registers.a, &mut self.registers, 1, 4),                 // SBC A,A
-            0xa0 => and(self.registers.b, &mut self.registers, 1, 4),                 // AND B
-            0xa1 => and(self.registers.c, &mut self.registers, 1, 4),                 // AND C
-            0xa2 => and(self.registers.d, &mut self.registers, 1, 4),                 // AND D
-            0xa3 => and(self.registers.e, &mut self.registers, 1, 4),                 // AND E
-            0xa4 => and(self.registers.h, &mut self.registers, 1, 4),                 // AND H
-            0xa5 => and(self.registers.l, &mut self.registers, 1, 4),                 // AND L
-            0xa6 => and(memory.read(self.registers.hl()), &mut self.registers, 1, 8), // AND (HL)
-            0xa7 => and(self.registers.a, &mut self.registers, 1, 4),                 // AND A
-            0xa8 => xor(self.registers.b, &mut self.registers, 4),                    // XOR B
-            0xa9 => xor(self.registers.c, &mut self.registers, 4),                    // XOR C
-            0xaa => xor(self.registers.d, &mut self.registers, 4),                    // XOR D
-            0xab => xor(self.registers.e, &mut self.registers, 4),                    // XOR E
-            0xac => xor(self.registers.h, &mut self.registers, 4),                    // XOR H
-            0xad => xor(self.registers.l, &mut self.registers, 4),                    // XOR L
-            0xae => xor(memory.read(self.registers.hl()), &mut self.registers, 8),    // XOR (HL)
-            0xaf => xor(self.registers.a, &mut self.registers, 4),                    // XOR A
-            0xb0 => or(self.registers.b, &mut self.registers, 1, 4),                  // OR B
-            0xb1 => or(self.registers.c, &mut self.registers, 1, 4),                  // OR C
-            0xb2 => or(self.registers.d, &mut self.registers, 1, 4),                  // OR D
-            0xb3 => or(self.registers.e, &mut self.registers, 1, 4),                  // OR E
-            0xb4 => or(self.registers.h, &mut self.registers, 1, 4),                  // OR H
-            0xb5 => or(self.registers.l, &mut self.registers, 1, 4),                  // OR L
-            0xb6 => or(memory.read(self.registers.hl()), &mut self.registers, 1, 8),  // OR (HL)
-            0xb7 => or(self.registers.a, &mut self.registers, 1, 4),                  // OR A
-            0xb8 => cp(self.registers.b, &mut self.registers, 1, 4),                  // CP B
-            0xb9 => cp(self.registers.c, &mut self.registers, 1, 4),                  // CP C
-            0xba => cp(self.registers.d, &mut self.registers, 1, 4),                  // CP D
-            0xbb => cp(self.registers.e, &mut self.registers, 1, 4),                  // CP E
-            0xbc => cp(self.registers.h, &mut self.registers, 1, 4),                  // CP H
-            0xbd => cp(self.registers.l, &mut self.registers, 1, 4),                  // CP L
-            0xbe => cp(memory.read(self.registers.hl()), &mut self.registers, 1, 8),  // CP (HL)
-            0xbf => cp(self.registers.a, &mut self.registers, 1, 4),                  // RES 7,A
-            0xc0 => {
-                if self.registers.f & Registers::FLAG_ZERO == 0 {
-                    self.registers.pc = stack_pop(&mut self.registers.sp, memory);
-                    Finish {
-                        pc_increment: 0,
-                        elapsed_cycles: 20,
-                    }
-                } else {
-                    Finish {
-                        pc_increment: 1,
-                        elapsed_cycles: 8,
-                    }
-                }
-            } // RET NZ
-            0xc1 => {
-                let new_bc = stack_pop(&mut self.registers.sp, memory);
-                self.registers.set_bc(new_bc);
-                Finish {
-                    pc_increment: 1,
-                    elapsed_cycles: 12,
-                }
-            } // POP BC
-            0xc2 => {
-                if self.registers.f & Registers::FLAG_ZERO == 0 {
-                    self.registers.pc = memory.read_u16(self.registers.pc + 1);
-                    Finish {
-                        pc_increment: 0,
-                        elapsed_cycles: 16,
-                    }
-                } else {
-                    Finish {
-                        pc_increment: 3,
-                        elapsed_cycles: 12,
-                    }
-                }
-            } // JP NZ,xx
-            0xc3 => {
-                self.registers.pc = memory.read_u16(self.registers.pc + 1);
-                Finish {
-                    pc_increment: 0,
-                    elapsed_cycles: 16,
-                }
-            } // JP xx
-            0xc4 => call_condition(
-                self.registers.f & Registers::FLAG_ZERO == 0,
-                &mut self.registers,
-                memory,
-            ), // CALL NZ,xx
-            0xc5 => {
-                stack_push(self.registers.bc(), &mut self.registers.sp, memory);
-                Finish {
-                    pc_increment: 1,
-                    elapsed_cycles: 16,
-                }
-            } // PUSH BC
-            0xc6 => add_u8(
-                memory.read(self.registers.pc + 1),
-                &mut self.registers,
-                2,
-                8,
-            ), // ADD A,x
-            0xc7 => rst(0x00, &mut self.registers, memory),                           // RST 00h
-            0xc8 => {
-                if self.registers.f & Registers::FLAG_ZERO != 0 {
-                    self.registers.pc = stack_pop(&mut self.registers.sp, memory);
-                    Finish {
-                        pc_increment: 0,
-                        elapsed_cycles: 20,
-                    }
-                } else {
-                    Finish {
-                        pc_increment: 1,
-                        elapsed_cycles: 8,
-                    }
-                }
-            } // RET Z
-            0xc9 => {
-                self.registers.pc = stack_pop(&mut self.registers.sp, memory);
-                Finish {
-                    pc_increment: 0,
-                    elapsed_cycles: 16,
-                }
-            } // RET
-            0xca => {
-                if self.registers.f & Registers::FLAG_ZERO != 0 {
-                    self.registers.pc = memory.read_u16(self.registers.pc + 1);
-                    Finish {
-                        pc_increment: 0,
-                        elapsed_cycles: 16,
-                    }
-                } else {
-                    Finish {
-                        pc_increment: 3,
-                        elapsed_cycles: 12,
-                    }
-                }
-            } // JP Z,xx
-            0xcb => {
-                let finish2 = cb::execute_cb_instruction(&mut self.registers, memory);
-                self.registers.change_flags(&finish2.flag_changes);
+            // 0x90 => sub(self.registers.b, &mut self.registers, 1, 4),                 // SUB B
+            // 0x91 => sub(self.registers.c, &mut self.registers, 1, 4),                 // SUB C
+            // 0x92 => sub(self.registers.d, &mut self.registers, 1, 4),                 // SUB D
+            // 0x93 => sub(self.registers.e, &mut self.registers, 1, 4),                 // SUB E
+            // 0x94 => sub(self.registers.h, &mut self.registers, 1, 4),                 // SUB H
+            // 0x95 => sub(self.registers.l, &mut self.registers, 1, 4),                 // SUB L
+            // 0x96 => sub(memory.read(self.registers.hl()), &mut self.registers, 1, 8), // SUB (HL)
+            // 0x97 => sub(self.registers.a, &mut self.registers, 1, 4),                 // SUB A
+            // 0x98 => sbc(self.registers.b, &mut self.registers, 1, 4),                 // SBC A,B
+            // 0x99 => sbc(self.registers.c, &mut self.registers, 1, 4),                 // SBC A,C
+            // 0x9a => sbc(self.registers.d, &mut self.registers, 1, 4),                 // SBC A,D
+            // 0x9b => sbc(self.registers.e, &mut self.registers, 1, 4),                 // SBC A,E
+            // 0x9c => sbc(self.registers.h, &mut self.registers, 1, 4),                 // SBC A,H
+            // 0x9d => sbc(self.registers.l, &mut self.registers, 1, 4),                 // SBC A,L
+            // 0x9e => sbc(memory.read(self.registers.hl()), &mut self.registers, 1, 8), // SBC A,(HL)
+            // 0x9f => sbc(self.registers.a, &mut self.registers, 1, 4),                 // SBC A,A
+            // 0xa0 => and(self.registers.b, &mut self.registers, 1, 4),                 // AND B
+            // 0xa1 => and(self.registers.c, &mut self.registers, 1, 4),                 // AND C
+            // 0xa2 => and(self.registers.d, &mut self.registers, 1, 4),                 // AND D
+            // 0xa3 => and(self.registers.e, &mut self.registers, 1, 4),                 // AND E
+            // 0xa4 => and(self.registers.h, &mut self.registers, 1, 4),                 // AND H
+            // 0xa5 => and(self.registers.l, &mut self.registers, 1, 4),                 // AND L
+            // 0xa6 => and(memory.read(self.registers.hl()), &mut self.registers, 1, 8), // AND (HL)
+            // 0xa7 => and(self.registers.a, &mut self.registers, 1, 4),                 // AND A
+            // 0xa8 => xor(self.registers.b, &mut self.registers, 4),                    // XOR B
+            // 0xa9 => xor(self.registers.c, &mut self.registers, 4),                    // XOR C
+            // 0xaa => xor(self.registers.d, &mut self.registers, 4),                    // XOR D
+            // 0xab => xor(self.registers.e, &mut self.registers, 4),                    // XOR E
+            // 0xac => xor(self.registers.h, &mut self.registers, 4),                    // XOR H
+            // 0xad => xor(self.registers.l, &mut self.registers, 4),                    // XOR L
+            // 0xae => xor(memory.read(self.registers.hl()), &mut self.registers, 8),    // XOR (HL)
+            // 0xaf => xor(self.registers.a, &mut self.registers, 4),                    // XOR A
+            // 0xb0 => or(self.registers.b, &mut self.registers, 1, 4),                  // OR B
+            // 0xb1 => or(self.registers.c, &mut self.registers, 1, 4),                  // OR C
+            // 0xb2 => or(self.registers.d, &mut self.registers, 1, 4),                  // OR D
+            // 0xb3 => or(self.registers.e, &mut self.registers, 1, 4),                  // OR E
+            // 0xb4 => or(self.registers.h, &mut self.registers, 1, 4),                  // OR H
+            // 0xb5 => or(self.registers.l, &mut self.registers, 1, 4),                  // OR L
+            // 0xb6 => or(memory.read(self.registers.hl()), &mut self.registers, 1, 8),  // OR (HL)
+            // 0xb7 => or(self.registers.a, &mut self.registers, 1, 4),                  // OR A
+            // 0xb8 => cp(self.registers.b, &mut self.registers, 1, 4),                  // CP B
+            // 0xb9 => cp(self.registers.c, &mut self.registers, 1, 4),                  // CP C
+            // 0xba => cp(self.registers.d, &mut self.registers, 1, 4),                  // CP D
+            // 0xbb => cp(self.registers.e, &mut self.registers, 1, 4),                  // CP E
+            // 0xbc => cp(self.registers.h, &mut self.registers, 1, 4),                  // CP H
+            // 0xbd => cp(self.registers.l, &mut self.registers, 1, 4),                  // CP L
+            // 0xbe => cp(memory.read(self.registers.hl()), &mut self.registers, 1, 8),  // CP (HL)
+            // 0xbf => cp(self.registers.a, &mut self.registers, 1, 4),                  // RES 7,A
+            // 0xc0 => {
+            //     if self.registers.f & Registers::FLAG_ZERO == 0 {
+            //         self.registers.pc = stack_pop(&mut self.registers.sp, memory);
+            //         Finish2 {
+            //             pc_increment: 0,
+            //             elapsed_cycles: 20,
+            //         }
+            //     } else {
+            //         Finish2 {
+            //             pc_increment: 1,
+            //             elapsed_cycles: 8,
+            //         }
+            //     }
+            // } // RET NZ
+            // 0xc1 => {
+            //     let new_bc = stack_pop(&mut self.registers.sp, memory);
+            //     self.registers.set_bc(new_bc);
+            //     Finish2 {
+            //         pc_increment: 1,
+            //         elapsed_cycles: 12,
+            //     }
+            // } // POP BC
+            // 0xc2 => {
+            //     if self.registers.f & Registers::FLAG_ZERO == 0 {
+            //         self.registers.pc = memory.read_u16(self.registers.pc + 1);
+            //         Finish2 {
+            //             pc_increment: 0,
+            //             elapsed_cycles: 16,
+            //         }
+            //     } else {
+            //         Finish2 {
+            //             pc_increment: 3,
+            //             elapsed_cycles: 12,
+            //         }
+            //     }
+            // } // JP NZ,xx
+            // 0xc3 => {
+            //     self.registers.pc = memory.read_u16(self.registers.pc + 1);
+            //     Finish2 {
+            //         pc_increment: 0,
+            //         elapsed_cycles: 16,
+            //     }
+            // } // JP xx
+            // 0xc4 => call_condition(
+            //     self.registers.f & Registers::FLAG_ZERO == 0,
+            //     &mut self.registers,
+            //     memory,
+            // ), // CALL NZ,xx
+            // 0xc5 => {
+            //     stack_push(self.registers.bc(), &mut self.registers.sp, memory);
+            //     Finish2 {
+            //         pc_increment: 1,
+            //         elapsed_cycles: 16,
+            //     }
+            // } // PUSH BC
+            // 0xc6 => add_u8(
+            //     memory.read(self.registers.pc + 1),
+            //     &mut self.registers,
+            //     2,
+            //     8,
+            // ), // ADD A,x
+            // 0xc7 => rst(0x00, &mut self.registers, memory),                           // RST 00h
+            // 0xc8 => {
+            //     if self.registers.f & Registers::FLAG_ZERO != 0 {
+            //         self.registers.pc = stack_pop(&mut self.registers.sp, memory);
+            //         Finish2 {
+            //             pc_increment: 0,
+            //             elapsed_cycles: 20,
+            //         }
+            //     } else {
+            //         Finish2 {
+            //             pc_increment: 1,
+            //             elapsed_cycles: 8,
+            //         }
+            //     }
+            // } // RET Z
+            // 0xc9 => {
+            //     self.registers.pc = stack_pop(&mut self.registers.sp, memory);
+            //     Finish2 {
+            //         pc_increment: 0,
+            //         elapsed_cycles: 16,
+            //     }
+            // } // RET
+            // 0xca => {
+            //     if self.registers.f & Registers::FLAG_ZERO != 0 {
+            //         self.registers.pc = memory.read_u16(self.registers.pc + 1);
+            //         Finish2 {
+            //             pc_increment: 0,
+            //             elapsed_cycles: 16,
+            //         }
+            //     } else {
+            //         Finish2 {
+            //             pc_increment: 3,
+            //             elapsed_cycles: 12,
+            //         }
+            //     }
+            // } // JP Z,xx
+            // 0xcb => {
+            //     let finish2 = cb::execute_cb_instruction(&mut self.registers, memory);
+            //     self.registers.change_flags(&finish2.flag_changes);
 
-                Finish {
-                    pc_increment: finish2.pc_increment,
-                    elapsed_cycles: finish2.elapsed_cycles,
-                }
-            }
-            0xcc => call_condition(
-                self.registers.f & Registers::FLAG_ZERO != 0,
-                &mut self.registers,
-                memory,
-            ), // CALL Z,xx
-            0xcd => call_condition(true, &mut self.registers, memory), // CALL xx
-            0xce => {
-                let x = memory.read(self.registers.pc + 1);
-                adc(x, &mut self.registers, 2, 8)
-            } // ADC A,x
-            0xcf => rst(0x08, &mut self.registers, memory),            // RST 08h
-            0xd0 => {
-                if self.registers.f & Registers::FLAG_CARRY == 0 {
-                    self.registers.pc = stack_pop(&mut self.registers.sp, memory);
-                    Finish {
-                        pc_increment: 0,
-                        elapsed_cycles: 20,
-                    }
-                } else {
-                    Finish {
-                        pc_increment: 1,
-                        elapsed_cycles: 8,
-                    }
-                }
-            } // RET NC
-            0xd1 => {
-                let popped_value = stack_pop(&mut self.registers.sp, memory);
-                self.registers.set_de(popped_value);
-                Finish {
-                    pc_increment: 1,
-                    elapsed_cycles: 12,
-                }
-            }
-            0xd2 => {
-                if self.registers.f & Registers::FLAG_CARRY == 0 {
-                    self.registers.pc = memory.read_u16(self.registers.pc + 1);
-                    Finish {
-                        pc_increment: 0,
-                        elapsed_cycles: 16,
-                    }
-                } else {
-                    Finish {
-                        pc_increment: 3,
-                        elapsed_cycles: 12,
-                    }
-                }
-            } // JP NC,xx
-            0xd3 => unreachable!("Invalid opcode"),
+            //     Finish2 {
+            //         pc_increment: finish2.pc_increment,
+            //         elapsed_cycles: finish2.elapsed_cycles,
+            //     }
+            // }
+            // 0xcc => call_condition(
+            //     self.registers.f & Registers::FLAG_ZERO != 0,
+            //     &mut self.registers,
+            //     memory,
+            // ), // CALL Z,xx
+            // 0xcd => call_condition(true, &mut self.registers, memory), // CALL xx
+            // 0xce => {
+            //     let x = memory.read(self.registers.pc + 1);
+            //     adc(x, &mut self.registers, 2, 8)
+            // } // ADC A,x
+            // 0xcf => rst(0x08, &mut self.registers, memory),            // RST 08h
+            // 0xd0 => {
+            //     if self.registers.f & Registers::FLAG_CARRY == 0 {
+            //         self.registers.pc = stack_pop(&mut self.registers.sp, memory);
+            //         Finish2 {
+            //             pc_increment: 0,
+            //             elapsed_cycles: 20,
+            //         }
+            //     } else {
+            //         Finish2 {
+            //             pc_increment: 1,
+            //             elapsed_cycles: 8,
+            //         }
+            //     }
+            // } // RET NC
+            // 0xd1 => {
+            //     let popped_value = stack_pop(&mut self.registers.sp, memory);
+            //     self.registers.set_de(popped_value);
+            //     Finish2 {
+            //         pc_increment: 1,
+            //         elapsed_cycles: 12,
+            //     }
+            // }
+            // 0xd2 => {
+            //     if self.registers.f & Registers::FLAG_CARRY == 0 {
+            //         self.registers.pc = memory.read_u16(self.registers.pc + 1);
+            //         Finish2 {
+            //             pc_increment: 0,
+            //             elapsed_cycles: 16,
+            //         }
+            //     } else {
+            //         Finish2 {
+            //             pc_increment: 3,
+            //             elapsed_cycles: 12,
+            //         }
+            //     }
+            // } // JP NC,xx
+            // 0xd3 => unreachable!("Invalid opcode"),
 
-            0xd4 => call_condition(
-                self.registers.f & Registers::FLAG_CARRY == 0,
-                &mut self.registers,
-                memory,
-            ), // CALL NC,xx
-            0xd5 => {
-                stack_push(self.registers.de(), &mut self.registers.sp, memory);
-                Finish {
-                    pc_increment: 1,
-                    elapsed_cycles: 16,
-                }
-            } // PUSH DE
-            0xd6 => {
-                let x = memory.read(self.registers.pc + 1);
-                sub(x, &mut self.registers, 2, 8)
-            } // SUB x
-            0xd7 => rst(0x10, &mut self.registers, memory), // RST 10h
-            0xd8 => {
-                if self.registers.f & Registers::FLAG_CARRY != 0 {
-                    self.registers.pc = stack_pop(&mut self.registers.sp, memory);
-                    Finish {
-                        pc_increment: 0,
-                        elapsed_cycles: 20,
-                    }
-                } else {
-                    Finish {
-                        pc_increment: 1,
-                        elapsed_cycles: 8,
-                    }
-                }
-            } // RET C
-            0xd9 => {
-                self.registers.pc = stack_pop(&mut self.registers.sp, memory);
-                self.registers.ime = true;
-                Finish {
-                    pc_increment: 0,
-                    elapsed_cycles: 16,
-                }
-            } // RETI
-            0xda => {
-                if self.registers.f & Registers::FLAG_CARRY != 0 {
-                    self.registers.pc = memory.read_u16(self.registers.pc + 1);
-                    Finish {
-                        pc_increment: 0,
-                        elapsed_cycles: 16,
-                    }
-                } else {
-                    Finish {
-                        pc_increment: 3,
-                        elapsed_cycles: 12,
-                    }
-                }
-            } // JP C,xx
-            0xdb => unreachable!("Invalid opcode"),
-            0xdc => call_condition(
-                self.registers.f & Registers::FLAG_CARRY != 0,
-                &mut self.registers,
-                memory,
-            ), // CALL C,xx
-            0xdd => unreachable!("Invalid opcode"),
-            0xde => {
-                let x = memory.read(self.registers.pc + 1);
-                sbc(x, &mut self.registers, 2, 8)
-            } // SBC A,x
-            0xdf => rst(0x18, &mut self.registers, memory), // RST 18h
-            0xe0 => {
-                memory.write(
-                    0xff00 + u16::from(memory.read(self.registers.pc + 1)),
-                    self.registers.a,
-                );
-                Finish {
-                    pc_increment: 2,
-                    elapsed_cycles: 12,
-                }
-            } // LDH (ff00+x),A
-            0xe1 => {
-                let popped_value = stack_pop(&mut self.registers.sp, memory);
-                self.registers.set_hl(popped_value);
-                Finish {
-                    pc_increment: 1,
-                    elapsed_cycles: 12,
-                }
-            } // POP HL
-            0xe2 => {
-                memory.write(0xff00 + u16::from(self.registers.c), self.registers.a);
-                Finish {
-                    pc_increment: 1,
-                    elapsed_cycles: 8,
-                }
-            } // LD (ff00+C),A
-            0xe3 => unreachable!("Invalid opcode"),
-            0xe4 => unreachable!("Invalid opcode"),
-            0xe5 => {
-                stack_push(self.registers.hl(), &mut self.registers.sp, memory);
-                Finish {
-                    pc_increment: 1,
-                    elapsed_cycles: 16,
-                }
-            } // PUSH HL
-            0xe6 => {
-                let x = memory.read(self.registers.pc + 1);
-                and(x, &mut self.registers, 2, 8)
-            } // AND x
-            0xe8 => {
-                // rwtodo: This is likely wrong.
-                let x: i32 = (memory.read(self.registers.pc + 1) as i8).into();
+            // 0xd4 => call_condition(
+            //     self.registers.f & Registers::FLAG_CARRY == 0,
+            //     &mut self.registers,
+            //     memory,
+            // ), // CALL NC,xx
+            // 0xd5 => {
+            //     stack_push(self.registers.de(), &mut self.registers.sp, memory);
+            //     Finish2 {
+            //         pc_increment: 1,
+            //         elapsed_cycles: 16,
+            //     }
+            // } // PUSH DE
+            // 0xd6 => {
+            //     let x = memory.read(self.registers.pc + 1);
+            //     sub(x, &mut self.registers, 2, 8)
+            // } // SUB x
+            // 0xd7 => rst(0x10, &mut self.registers, memory), // RST 10h
+            // 0xd8 => {
+            //     if self.registers.f & Registers::FLAG_CARRY != 0 {
+            //         self.registers.pc = stack_pop(&mut self.registers.sp, memory);
+            //         Finish2 {
+            //             pc_increment: 0,
+            //             elapsed_cycles: 20,
+            //         }
+            //     } else {
+            //         Finish2 {
+            //             pc_increment: 1,
+            //             elapsed_cycles: 8,
+            //         }
+            //     }
+            // } // RET C
+            // 0xd9 => {
+            //     self.registers.pc = stack_pop(&mut self.registers.sp, memory);
+            //     self.registers.ime = true;
+            //     Finish2 {
+            //         pc_increment: 0,
+            //         elapsed_cycles: 16,
+            //     }
+            // } // RETI
+            // 0xda => {
+            //     if self.registers.f & Registers::FLAG_CARRY != 0 {
+            //         self.registers.pc = memory.read_u16(self.registers.pc + 1);
+            //         Finish2 {
+            //             pc_increment: 0,
+            //             elapsed_cycles: 16,
+            //         }
+            //     } else {
+            //         Finish2 {
+            //             pc_increment: 3,
+            //             elapsed_cycles: 12,
+            //         }
+            //     }
+            // } // JP C,xx
+            // 0xdb => unreachable!("Invalid opcode"),
+            // 0xdc => call_condition(
+            //     self.registers.f & Registers::FLAG_CARRY != 0,
+            //     &mut self.registers,
+            //     memory,
+            // ), // CALL C,xx
+            // 0xdd => unreachable!("Invalid opcode"),
+            // 0xde => {
+            //     let x = memory.read(self.registers.pc + 1);
+            //     sbc(x, &mut self.registers, 2, 8)
+            // } // SBC A,x
+            // 0xdf => rst(0x18, &mut self.registers, memory), // RST 18h
+            // 0xe0 => {
+            //     memory.write(
+            //         0xff00 + u16::from(memory.read(self.registers.pc + 1)),
+            //         self.registers.a,
+            //     );
+            //     Finish2 {
+            //         pc_increment: 2,
+            //         elapsed_cycles: 12,
+            //     }
+            // } // LDH (ff00+x),A
+            // 0xe1 => {
+            //     let popped_value = stack_pop(&mut self.registers.sp, memory);
+            //     self.registers.set_hl(popped_value);
+            //     Finish2 {
+            //         pc_increment: 1,
+            //         elapsed_cycles: 12,
+            //     }
+            // } // POP HL
+            // 0xe2 => {
+            //     memory.write(0xff00 + u16::from(self.registers.c), self.registers.a);
+            //     Finish2 {
+            //         pc_increment: 1,
+            //         elapsed_cycles: 8,
+            //     }
+            // } // LD (ff00+C),A
+            // 0xe3 => unreachable!("Invalid opcode"),
+            // 0xe4 => unreachable!("Invalid opcode"),
+            // 0xe5 => {
+            //     stack_push(self.registers.hl(), &mut self.registers.sp, memory);
+            //     Finish2 {
+            //         pc_increment: 1,
+            //         elapsed_cycles: 16,
+            //     }
+            // } // PUSH HL
+            // 0xe6 => {
+            //     let x = memory.read(self.registers.pc + 1);
+            //     and(x, &mut self.registers, 2, 8)
+            // } // AND x
+            // 0xe8 => {
+            //     // rwtodo: This is likely wrong.
+            //     let x: i32 = (memory.read(self.registers.pc + 1) as i8).into();
 
-                // rwtodo: Investigate what happens with this double XOR.
-                let sp32: i32 = self.registers.sp.into();
-                let xor_result = sp32 ^ x ^ (sp32 + x);
+            //     // rwtodo: Investigate what happens with this double XOR.
+            //     let sp32: i32 = self.registers.sp.into();
+            //     let xor_result = sp32 ^ x ^ (sp32 + x);
 
-                self.registers.f = 0;
-                if (xor_result & 0x10) != 0 {
-                    self.registers.f |= Registers::FLAG_HALFCARRY;
-                }
-                if (xor_result & 0x100) != 0 {
-                    self.registers.f |= Registers::FLAG_CARRY;
-                }
+            //     self.registers.f = 0;
+            //     if (xor_result & 0x10) != 0 {
+            //         self.registers.f |= Registers::FLAG_HALFCARRY;
+            //     }
+            //     if (xor_result & 0x100) != 0 {
+            //         self.registers.f |= Registers::FLAG_CARRY;
+            //     }
 
-                self.registers.sp = self.registers.sp.wrapping_add_signed(x.try_into().unwrap());
+            //     self.registers.sp = self.registers.sp.wrapping_add_signed(x.try_into().unwrap());
 
-                Finish {
-                    pc_increment: 2,
-                    elapsed_cycles: 16,
-                }
-            } // ADD SP,s
-            0xe9 => {
-                self.registers.pc = self.registers.hl();
-                Finish {
-                    pc_increment: 0,
-                    elapsed_cycles: 4,
-                }
-            } // JP (HL)
-            0xea => {
-                memory.write(memory.read_u16(self.registers.pc + 1), self.registers.a);
-                Finish {
-                    pc_increment: 3,
-                    elapsed_cycles: 16,
-                }
-            } // LD (x),A
-            0xf0 => {
-                self.registers.a =
-                    memory.read(0xff00 + u16::from(memory.read(self.registers.pc + 1)));
-                Finish {
-                    pc_increment: 2,
-                    elapsed_cycles: 12,
-                }
-            } // LDH A,(0xff00+x)
-            0xf1 => {
-                let new_af = stack_pop(&mut self.registers.sp, memory) & 0xfff0; // Lower nybble of F must stay 0.
-                self.registers.set_af(new_af);
-                Finish {
-                    pc_increment: 1,
-                    elapsed_cycles: 12,
-                }
-            } // POP AF
-            0xf2 => {
-                self.registers.a = memory.read(0xff00 + u16::from(self.registers.c));
-                Finish {
-                    pc_increment: 1,
-                    elapsed_cycles: 8,
-                }
-            } // LD A,(ff00+C)
-            0xf3 => {
-                self.registers.ime = false;
-                Finish {
-                    pc_increment: 1,
-                    elapsed_cycles: 4,
-                }
-            } // DI
-            0xf4 => unreachable!("Invalid opcode"),
-            0xf5 => {
-                stack_push(self.registers.af(), &mut self.registers.sp, memory);
-                Finish {
-                    pc_increment: 1,
-                    elapsed_cycles: 16,
-                }
-            } // PUSH AF
-            0xf6 => {
-                let x = memory.read(self.registers.pc + 1);
-                or(x, &mut self.registers, 2, 8)
-            } // OR x
-            0xf7 => rst(0x30, &mut self.registers, memory), // RST 30h
-            0xf8 => {
-                // rwtodo: This is likely wrong.
-                let x: i32 = (memory.read(self.registers.pc + 1) as i8).into();
+            //     Finish2 {
+            //         pc_increment: 2,
+            //         elapsed_cycles: 16,
+            //     }
+            // } // ADD SP,s
+            // 0xe9 => {
+            //     self.registers.pc = self.registers.hl();
+            //     Finish2 {
+            //         pc_increment: 0,
+            //         elapsed_cycles: 4,
+            //     }
+            // } // JP (HL)
+            // 0xea => {
+            //     memory.write(memory.read_u16(self.registers.pc + 1), self.registers.a);
+            //     Finish2 {
+            //         pc_increment: 3,
+            //         elapsed_cycles: 16,
+            //     }
+            // } // LD (x),A
+            // 0xf0 => {
+            //     self.registers.a =
+            //         memory.read(0xff00 + u16::from(memory.read(self.registers.pc + 1)));
+            //     Finish2 {
+            //         pc_increment: 2,
+            //         elapsed_cycles: 12,
+            //     }
+            // } // LDH A,(0xff00+x)
+            // 0xf1 => {
+            //     let new_af = stack_pop(&mut self.registers.sp, memory) & 0xfff0; // Lower nybble of F must stay 0.
+            //     self.registers.set_af(new_af);
+            //     Finish2 {
+            //         pc_increment: 1,
+            //         elapsed_cycles: 12,
+            //     }
+            // } // POP AF
+            // 0xf2 => {
+            //     self.registers.a = memory.read(0xff00 + u16::from(self.registers.c));
+            //     Finish2 {
+            //         pc_increment: 1,
+            //         elapsed_cycles: 8,
+            //     }
+            // } // LD A,(ff00+C)
+            // 0xf3 => {
+            //     self.registers.ime = false;
+            //     Finish2 {
+            //         pc_increment: 1,
+            //         elapsed_cycles: 4,
+            //     }
+            // } // DI
+            // 0xf4 => unreachable!("Invalid opcode"),
+            // 0xf5 => {
+            //     stack_push(self.registers.af(), &mut self.registers.sp, memory);
+            //     Finish2 {
+            //         pc_increment: 1,
+            //         elapsed_cycles: 16,
+            //     }
+            // } // PUSH AF
+            // 0xf6 => {
+            //     let x = memory.read(self.registers.pc + 1);
+            //     or(x, &mut self.registers, 2, 8)
+            // } // OR x
+            // 0xf7 => rst(0x30, &mut self.registers, memory), // RST 30h
+            // 0xf8 => {
+            //     // rwtodo: This is likely wrong.
+            //     let x: i32 = (memory.read(self.registers.pc + 1) as i8).into();
 
-                // rwtodo: Investigate what happens with this double XOR.
-                let sp32: i32 = self.registers.sp.into();
-                let xor_result = sp32 ^ x ^ (sp32 + x);
+            //     // rwtodo: Investigate what happens with this double XOR.
+            //     let sp32: i32 = self.registers.sp.into();
+            //     let xor_result = sp32 ^ x ^ (sp32 + x);
 
-                self.registers.f = 0;
-                if (xor_result & 0x10) != 0 {
-                    self.registers.f |= Registers::FLAG_HALFCARRY;
-                }
-                if (xor_result & 0x100) != 0 {
-                    self.registers.f |= Registers::FLAG_CARRY;
-                }
+            //     self.registers.f = 0;
+            //     if (xor_result & 0x10) != 0 {
+            //         self.registers.f |= Registers::FLAG_HALFCARRY;
+            //     }
+            //     if (xor_result & 0x100) != 0 {
+            //         self.registers.f |= Registers::FLAG_CARRY;
+            //     }
 
-                self.registers.set_hl((sp32 + x) as u16);
+            //     self.registers.set_hl((sp32 + x) as u16);
 
-                Finish {
-                    pc_increment: 2,
-                    elapsed_cycles: 12,
-                }
-            } // LDHL SP,s
-            0xf9 => {
-                self.registers.sp = self.registers.hl();
-                Finish {
-                    pc_increment: 1,
-                    elapsed_cycles: 8,
-                }
-            } // LD SP,HL
-            0xfa => {
-                let address = u16::from(memory.read_u16(self.registers.pc + 1));
-                self.registers.a = memory.read(address);
-                Finish {
-                    pc_increment: 3,
-                    elapsed_cycles: 16,
-                }
-            } // LD A,(xx)
-            0xfb => {
-                self.registers.ime = true;
-                Finish {
-                    pc_increment: 1,
-                    elapsed_cycles: 4,
-                }
-            } // IE
-            0xfc => unreachable!("Invalid opcode"),
-            0xfd => unreachable!("Invalid opcode"),
-            0xfe => {
-                let byte_0 = memory.read(self.registers.pc + 1);
+            //     Finish2 {
+            //         pc_increment: 2,
+            //         elapsed_cycles: 12,
+            //     }
+            // } // LDHL SP,s
+            // 0xf9 => {
+            //     self.registers.sp = self.registers.hl();
+            //     Finish2 {
+            //         pc_increment: 1,
+            //         elapsed_cycles: 8,
+            //     }
+            // } // LD SP,HL
+            // 0xfa => {
+            //     let address = u16::from(memory.read_u16(self.registers.pc + 1));
+            //     self.registers.a = memory.read(address);
+            //     Finish2 {
+            //         pc_increment: 3,
+            //         elapsed_cycles: 16,
+            //     }
+            // } // LD A,(xx)
+            // 0xfb => {
+            //     self.registers.ime = true;
+            //     Finish2 {
+            //         pc_increment: 1,
+            //         elapsed_cycles: 4,
+            //     }
+            // } // IE
+            // 0xfc => unreachable!("Invalid opcode"),
+            // 0xfd => unreachable!("Invalid opcode"),
+            // 0xfe => {
+            //     let byte_0 = memory.read(self.registers.pc + 1);
 
-                if subtraction_produces_u8_half_carry(
-                    self.registers.a,
-                    byte_0,
-                    self.registers.f,
-                    false,
-                ) {
-                    self.registers.f |= Registers::FLAG_HALFCARRY;
-                } else {
-                    self.registers.f &= !Registers::FLAG_HALFCARRY;
-                }
+            //     if subtraction_produces_u8_half_carry(
+            //         self.registers.a,
+            //         byte_0,
+            //         self.registers.f,
+            //         false,
+            //     ) {
+            //         self.registers.f |= Registers::FLAG_HALFCARRY;
+            //     } else {
+            //         self.registers.f &= !Registers::FLAG_HALFCARRY;
+            //     }
 
-                if subtraction_produces_u8_full_carry(self.registers.a, byte_0) {
-                    self.registers.f |= Registers::FLAG_CARRY;
-                } else {
-                    self.registers.f &= !Registers::FLAG_CARRY;
-                }
+            //     if subtraction_produces_u8_full_carry(self.registers.a, byte_0) {
+            //         self.registers.f |= Registers::FLAG_CARRY;
+            //     } else {
+            //         self.registers.f &= !Registers::FLAG_CARRY;
+            //     }
 
-                // Set the add/sub flag high, indicating subtraction.
-                self.registers.f |= Registers::FLAG_SUBTRACTION;
+            //     // Set the add/sub flag high, indicating subtraction.
+            //     self.registers.f |= Registers::FLAG_SUBTRACTION;
 
-                let sub_result = self.registers.a.wrapping_sub(byte_0);
-                if sub_result == 0 {
-                    self.registers.f |= Registers::FLAG_ZERO;
-                } else {
-                    self.registers.f &= !Registers::FLAG_ZERO;
-                }
+            //     let sub_result = self.registers.a.wrapping_sub(byte_0);
+            //     if sub_result == 0 {
+            //         self.registers.f |= Registers::FLAG_ZERO;
+            //     } else {
+            //         self.registers.f &= !Registers::FLAG_ZERO;
+            //     }
 
-                Finish {
-                    pc_increment: 2,
-                    elapsed_cycles: 8,
-                }
-            } // CP x
+            //     Finish2 {
+            //         pc_increment: 2,
+            //         elapsed_cycles: 8,
+            //     }
+            // } // CP x
             _ => todo!(
                 "Unknown opcode {:#04x} at address {:#06x}\n",
                 opcode,
@@ -1230,6 +1077,7 @@ impl Cpu {
         };
 
         self.registers.pc = self.registers.pc.wrapping_add_signed(finish.pc_increment);
+        self.registers.change_flags(finish.flag_changes);
         finish.elapsed_cycles
     }
 }

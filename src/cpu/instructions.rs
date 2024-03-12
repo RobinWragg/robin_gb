@@ -22,6 +22,42 @@ pub struct Finish2 {
     pub elapsed_cycles: u8,
 }
 
+impl Finish2 {
+    pub fn new(pc_increment: i16, elapsed_cycles: u8) -> Finish2 {
+        Finish2 {
+            pc_increment,
+            elapsed_cycles,
+            flag_changes: FlagChanges {
+                z: None,
+                n: None,
+                h: None,
+                c: None,
+            },
+        }
+    }
+
+    pub fn flag_z(mut self, new_z: bool) -> Self {
+        self.flag_changes.z = Some(new_z);
+        self
+    }
+
+    pub fn flag_n(mut self, new_n: bool) -> Self {
+        self.flag_changes.n = Some(new_n);
+        self
+    }
+
+    pub fn flag_h(mut self, new_h: bool) -> Self {
+        self.flag_changes.h = Some(new_h);
+        self
+    }
+
+    pub fn flag_c(mut self, new_c: bool) -> Self {
+        self.flag_changes.c = Some(new_c);
+        self
+    }
+}
+
+// rwtodo: Maybe these checks should return a FlagChanges.
 pub fn subtraction_produces_u8_full_carry(a: u8, b: u8) -> bool {
     i16::from(a) - i16::from(b) < 0
 }
@@ -122,27 +158,14 @@ pub fn print_instruction(pc: u16, memory: &mut Memory) {
     };
 }
 
-pub fn inc_u8(value_to_increment: &mut u8, register_f: &mut u8, elapsed_cycles: u8) -> Finish {
-    if addition_produces_u8_half_carry(*value_to_increment, 1, *register_f, false) {
-        *register_f |= Registers::FLAG_HALFCARRY;
-    } else {
-        *register_f &= !Registers::FLAG_HALFCARRY;
-    }
-
+pub fn inc_u8(value_to_increment: &mut u8, register_f: u8, elapsed_cycles: u8) -> Finish2 {
+    let half_carry = addition_produces_u8_half_carry(*value_to_increment, 1, register_f, false);
     *value_to_increment = value_to_increment.wrapping_add(1);
 
-    if *value_to_increment != 0 {
-        *register_f &= !Registers::FLAG_ZERO;
-    } else {
-        *register_f |= Registers::FLAG_ZERO;
-    }
-
-    *register_f &= !Registers::FLAG_SUBTRACTION;
-
-    Finish {
-        pc_increment: 1,
-        elapsed_cycles,
-    }
+    Finish2::new(1, elapsed_cycles)
+        .flag_z(*value_to_increment != 0)
+        .flag_n(false)
+        .flag_h(half_carry)
 }
 
 pub fn xor(xor_input: u8, registers: &mut Registers, elapsed_cycles: u8) -> Finish {
@@ -268,75 +291,46 @@ fn swap(byte_to_swap: &mut u8, register_f: &mut u8, elapsed_cycles: u8) -> Finis
     }
 }
 
-pub fn ld_reg8_mem8(dst_register: &mut u8, src_memory: u8) -> Finish {
+pub fn ld_reg8_mem8(dst_register: &mut u8, src_memory: u8) -> Finish2 {
     *dst_register = src_memory;
-    Finish {
-        pc_increment: 2,
-        elapsed_cycles: 8,
-    }
+    Finish2::new(2, 8)
 }
 
-pub fn ld_reg8_reg8(dst_register: &mut u8, src_register: u8) -> Finish {
+pub fn ld_reg8_reg8(dst_register: &mut u8, src_register: u8) -> Finish2 {
     *dst_register = src_register;
-    Finish {
-        pc_increment: 1,   // Same as NOP
-        elapsed_cycles: 4, // Same as NOP
-    }
+
+    // Same as NOP, as LD B,B is a de facto NOP.
+    Finish2::new(1, 4)
 }
 
-pub fn nop() -> Finish {
-    Finish {
-        pc_increment: 1,   // Same as ld_reg8_reg8
-        elapsed_cycles: 4, // Same as ld_reg8_reg8
-    }
+pub fn nop() -> Finish2 {
+    // Same as ld_reg8_reg8
+    Finish2::new(1, 4)
 }
 
-pub fn dec_u8(value_to_dec: &mut u8, register_f: &mut u8, elapsed_cycles: u8) -> Finish {
-    if subtraction_produces_u8_half_carry(*value_to_dec, 1, *register_f, false) {
-        *register_f |= Registers::FLAG_HALFCARRY;
-    } else {
-        *register_f &= !Registers::FLAG_HALFCARRY;
-    }
+pub fn dec_u8(value_to_dec: &mut u8, register_f: u8, elapsed_cycles: u8) -> Finish2 {
+    let half_carry = subtraction_produces_u8_half_carry(*value_to_dec, 1, register_f, false);
 
     *value_to_dec = value_to_dec.wrapping_sub(1);
 
-    if *value_to_dec != 0 {
-        *register_f &= !Registers::FLAG_ZERO;
-    } else {
-        *register_f |= Registers::FLAG_ZERO;
-    }
-
-    *register_f |= Registers::FLAG_SUBTRACTION;
-
-    Finish {
-        pc_increment: 1,
-        elapsed_cycles,
-    }
+    Finish2::new(1, elapsed_cycles)
+        .flag_h(half_carry)
+        .flag_n(true)
+        .flag_z(*value_to_dec != 0)
 }
 
-pub fn add_reg16(src: u16, dst_register: &mut u16, register_f: &mut u8) -> Finish {
-    // Check for 16-bit full carry
-    if i32::from(*dst_register) + i32::from(src) > 0xffff {
-        *register_f |= Registers::FLAG_CARRY;
-    } else {
-        *register_f &= !Registers::FLAG_CARRY;
-    }
-
-    // Check for 16-bit half carry
-    if (*dst_register & 0x0fff) + (src & 0x0fff) > 0x0fff {
-        *register_f |= Registers::FLAG_HALFCARRY;
-    } else {
-        *register_f &= !Registers::FLAG_HALFCARRY;
-    }
-
-    *register_f &= !Registers::FLAG_SUBTRACTION;
+// rwtodo: having the params in order src,dst isn't idiomatic.
+pub fn add_reg16(src: u16, dst_register: &mut u16) -> Finish2 {
+    // Check for 16-bit full- and half-carry
+    let full_carry = i32::from(*dst_register) + i32::from(src) > 0xffff;
+    let half_carry = (*dst_register & 0x0fff) + (src & 0x0fff) > 0x0fff;
 
     *dst_register = dst_register.wrapping_add(src);
 
-    Finish {
-        pc_increment: 1,
-        elapsed_cycles: 8,
-    }
+    Finish2::new(1, 8)
+        .flag_n(false)
+        .flag_h(half_carry)
+        .flag_c(full_carry)
 }
 
 pub fn call_condition(condition: bool, registers: &mut Registers, memory: &mut Memory) -> Finish {
@@ -356,38 +350,23 @@ pub fn call_condition(condition: bool, registers: &mut Registers, memory: &mut M
     }
 }
 
+// rwtodo: Can I reuse this for INC? and SUB for DEC?
 pub fn add_u8(
     add_src: u8,
     registers: &mut Registers,
     pc_increment: i16,
     elapsed_cycles: u8,
-) -> Finish {
-    if addition_produces_u8_half_carry(registers.a, add_src, registers.f, false) {
-        registers.f |= Registers::FLAG_HALFCARRY;
-    } else {
-        registers.f &= !Registers::FLAG_HALFCARRY;
-    }
-
-    if addition_produces_u8_full_carry(registers.a, add_src) {
-        registers.f |= Registers::FLAG_CARRY;
-    } else {
-        registers.f &= !Registers::FLAG_CARRY;
-    }
+) -> Finish2 {
+    let half_carry = addition_produces_u8_half_carry(registers.a, add_src, registers.f, false);
+    let full_carry = addition_produces_u8_full_carry(registers.a, add_src);
 
     registers.a = registers.a.wrapping_add(add_src);
 
-    if registers.a == 0 {
-        registers.f |= Registers::FLAG_ZERO;
-    } else {
-        registers.f &= !Registers::FLAG_ZERO;
-    }
-
-    registers.f &= !Registers::FLAG_SUBTRACTION;
-
-    Finish {
-        pc_increment,
-        elapsed_cycles,
-    }
+    Finish2::new(pc_increment, elapsed_cycles)
+        .flag_z(registers.a == 0)
+        .flag_n(false)
+        .flag_h(half_carry)
+        .flag_c(full_carry)
 }
 
 pub fn adc(
@@ -395,40 +374,23 @@ pub fn adc(
     registers: &mut Registers,
     pc_increment: i16,
     elapsed_cycles: u8,
-) -> Finish {
-    let carry = if (registers.f & Registers::FLAG_CARRY) != 0 {
+) -> Finish2 {
+    let carry_value = if (registers.f & Registers::FLAG_CARRY) != 0 {
         1
     } else {
         0
     };
 
-    if addition_produces_u8_half_carry(registers.a, add_src, registers.f, true) {
-        registers.f |= Registers::FLAG_HALFCARRY;
-    } else {
-        registers.f &= !Registers::FLAG_HALFCARRY;
-    }
+    let half_carry_flag = addition_produces_u8_half_carry(registers.a, add_src, registers.f, true);
+    let full_carry_flag = addition_produces_u8_full_carry(registers.a, add_src + carry_value);
 
-    // rwtodo: this might have an issue with it similar to the trouble I had with adding the carry for the half-carry calculation above.
-    if addition_produces_u8_full_carry(registers.a, add_src + carry) {
-        registers.f |= Registers::FLAG_CARRY;
-    } else {
-        registers.f &= !Registers::FLAG_CARRY;
-    }
+    registers.a += add_src + carry_value;
 
-    registers.a += add_src + carry;
-
-    if registers.a == 0 {
-        registers.f |= Registers::FLAG_ZERO;
-    } else {
-        registers.f &= !Registers::FLAG_ZERO;
-    }
-
-    registers.f &= !Registers::FLAG_SUBTRACTION;
-
-    Finish {
-        pc_increment,
-        elapsed_cycles,
-    }
+    Finish2::new(pc_increment, elapsed_cycles)
+        .flag_h(half_carry_flag)
+        .flag_c(full_carry_flag)
+        .flag_z(registers.a == 0)
+        .flag_n(false)
 }
 
 pub fn sub(
