@@ -1,5 +1,4 @@
-#![allow(unused_variables)]
-#![allow(dead_code)]
+#![allow(dead_code)] // rwtodo: remove.
 
 mod cpu;
 mod lcd;
@@ -171,7 +170,6 @@ impl GameBoy {
             self.lcd.update(elapsed_cycles, &mut self.memory);
             self.timer.update(elapsed_cycles, &mut self.memory);
 
-            // rwtodo discuss why I can't do .into() here.
             total_elapsed_cycles_this_h_blank += u32::from(elapsed_cycles);
         }
 

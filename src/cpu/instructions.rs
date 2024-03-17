@@ -163,9 +163,9 @@ pub fn inc_u8(value_to_increment: &mut u8, register_f: u8, cycles: u8) -> CpuDif
         .flag_h(half_carry)
 }
 
-pub fn xor(xor_input: u8, register_a: &mut u8, cycles: u8) -> CpuDiff {
+pub fn xor(xor_input: u8, register_a: &mut u8, pc_delta: i16, cycles: u8) -> CpuDiff {
     *register_a ^= xor_input;
-    CpuDiff::new(1, cycles)
+    CpuDiff::new(pc_delta, cycles)
         .flag_z(*register_a == 0)
         .flag_n(false)
         .flag_h(false)
