@@ -252,7 +252,7 @@ impl Cpu {
                 CpuDiff::new(1, 8)
             } // LD (BC),A
             0x03 => {
-                self.registers.set_bc(self.registers.bc() + 1);
+                self.registers.set_bc(self.registers.bc().wrapping_add(1));
                 CpuDiff::new(1, 8)
             } // INC BC
             0x04 => inc_u8(&mut self.registers.b, self.registers.f, 4), // INC B
@@ -327,7 +327,7 @@ impl Cpu {
                 CpuDiff::new(1, 8)
             } // LD (DE),A
             0x13 => {
-                self.registers.set_de(self.registers.de() + 1);
+                self.registers.set_de(self.registers.de().wrapping_add(1));
                 CpuDiff::new(1, 8)
             } // INC DE
             0x14 => inc_u8(&mut self.registers.d, self.registers.f, 4), // INC D
@@ -396,11 +396,11 @@ impl Cpu {
             } // LD HL,xx
             0x22 => {
                 memory.write(self.registers.hl(), self.registers.a);
-                self.registers.set_hl(self.registers.hl() + 1);
+                self.registers.set_hl(self.registers.hl().wrapping_add(1));
                 CpuDiff::new(1, 8)
             } // LD (HL+),A
             0x23 => {
-                self.registers.set_hl(self.registers.hl() + 1);
+                self.registers.set_hl(self.registers.hl().wrapping_add(1));
                 CpuDiff::new(1, 8)
             } // INC HL
             0x24 => inc_u8(&mut self.registers.h, self.registers.f, 4), // INC H
@@ -453,7 +453,7 @@ impl Cpu {
             } // ADD HL,HL
             0x2a => {
                 self.registers.a = memory.read(self.registers.hl());
-                self.registers.set_hl(self.registers.hl() + 1);
+                self.registers.set_hl(self.registers.hl().wrapping_add(1));
                 CpuDiff::new(1, 8)
             } // LD A,(HL+)
             0x2b => {
