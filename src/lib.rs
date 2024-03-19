@@ -102,7 +102,7 @@ impl Timer {
                 if self.cycles_since_last_tima_increment >= cycles_per_tima_increment {
                     let counter = memory.read(Self::COUNTER_ADDRESS);
                     let previous_tima_value = counter;
-                    memory.write(Self::COUNTER_ADDRESS, counter + 1);
+                    memory.write(Self::COUNTER_ADDRESS, counter.wrapping_add(1));
 
                     // Check for overflow.
                     if previous_tima_value > counter {
