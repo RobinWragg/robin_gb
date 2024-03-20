@@ -219,6 +219,8 @@ impl Memory {
         // rwtodo: convert to match statement?
         if address < 0x8000 {
             // perform_cart_control(address, value); rwtodo
+        } else if address >= 0xfea0 && address <= 0xfe9f {
+            panic!("Attempted to write to a prohibited region");
         } else if address == 0xff00 {
             // rwtodo: label 0xff00 as a constant?
             self.bytes[address as usize] = self.get_joypad_register_write_result(value);
@@ -271,12 +273,12 @@ impl Memory {
     }
 
     pub fn read(&self, address: u16) -> u8 {
-        // rwtodo rom banks
-        // if address >= 0x4000 && address < 0x8000 {
-        //     return robingb_romb_read_switchable_bank(address);
-        // } else {
-        self.bytes[address as usize]
-        // }
+        // rwtodo rom bank slot at address >= 0x4000 && address < 0x8000
+        if address >= 0xfea0 && address <= 0xfe9f {
+            panic!("Attempted to read from a prohibited region");
+        } else {
+            self.bytes[address as usize]
+        }
     }
 
     pub fn read_u16(&self, address: u16) -> u16 {
