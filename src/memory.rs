@@ -1,5 +1,7 @@
 use num_enum::TryFromPrimitive;
 
+// rwtodo: ensure LY is never written to by the game.
+
 use crate::address;
 use crate::interrupt;
 use crate::make_u16;

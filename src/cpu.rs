@@ -86,7 +86,7 @@ impl Registers {
     }
 
     fn bc(&self) -> u16 {
-        make_u16(self.c, self.d)
+        make_u16(self.c, self.b)
     }
 
     fn set_bc(&mut self, new_bc: u16) {

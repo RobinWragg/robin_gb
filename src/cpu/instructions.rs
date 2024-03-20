@@ -98,6 +98,7 @@ pub fn print_instruction(pc: u16, memory: &mut Memory) {
         0x21 => println!("LD HL,{:#06x}", memory.read_u16(pc + 1)),
         0x2c => println!("INC L"),
         0x32 => println!("LD (HL-),A"),
+        0x36 => println!("LD (HL),{:#04x}", memory.read(pc + 1)),
         0x3e => println!("LD A,{:#04x}", memory.read(pc + 1)),
         0x40 => println!("LD B,B"),
         0x41 => println!("LD B,C"),
