@@ -115,18 +115,39 @@ impl Registers {
         self.h = bytes[1];
     }
 
-    fn register_specified_by_opcode(&mut self, opcode: u8) -> &mut u8 {
-        match opcode & 0x0f {
-            0x00 => &mut self.b,
-            0x01 => &mut self.c,
-            0x02 => &mut self.d,
-            0x03 => &mut self.e,
-            0x04 => &mut self.h,
-            0x05 => &mut self.l,
-            // 0x06 => TODO
-            0x07 => &mut self.a,
+    fn read_operand_8bit(&mut self, operand_code_3bit: u8, memory: &Memory) -> u8 {
+        debug_assert!(operand_code_3bit & 0b11111000 == 0);
+        match operand_code_3bit {
+            0x00 => self.b,
+            0x01 => self.c,
+            0x02 => self.d,
+            0x03 => self.e,
+            0x04 => self.h,
+            0x05 => self.l,
+            0x06 => memory.read(self.hl()),
+            0x07 => self.a,
             _ => todo!(),
         }
+    }
+
+    fn write_operand_8bit(
+        &mut self,
+        operand_value: u8,
+        operand_code_3bit: u8,
+        memory: &mut Memory,
+    ) {
+        debug_assert!(operand_code_3bit & 0b11111000 == 0);
+        match operand_code_3bit & 0x0f {
+            0x00 => self.b = operand_value,
+            0x01 => self.c = operand_value,
+            0x02 => self.d = operand_value,
+            0x03 => self.e = operand_value,
+            0x04 => self.h = operand_value,
+            0x05 => self.l = operand_value,
+            0x06 => memory.write(self.hl(), operand_value),
+            0x07 => self.a = operand_value,
+            _ => todo!(),
+        };
     }
 
     fn update_flags(&mut self, flag_changes: FlagDiff) {
@@ -229,7 +250,6 @@ impl Cpu {
             return 4;
         }
 
-        // print_instruction(self.registers.pc, memory); rwtodo
         // Check for unexpected addresses for instructions.
         debug_assert!(
             self.registers.pc < 0x8000
@@ -237,6 +257,10 @@ impl Cpu {
         );
 
         let opcode = memory.read(self.registers.pc);
+
+        // print!("{:#06x} {:#04x}: ", self.registers.pc, opcode);
+        // print_instruction(self.registers.pc, memory);
+        // println!();
 
         use instructions::*;
 
