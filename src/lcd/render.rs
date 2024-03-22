@@ -14,8 +14,9 @@ const LCDC_BG_AND_WINDOW_ENABLED: u8 = 0x01;
 const NUM_BYTES_PER_TILE: i32 = 16;
 const NUM_BYTES_PER_TILE_LINE: i32 = 2;
 const NUM_TILES_PER_BG_LINE: u8 = 32;
-const TILE_WIDTH: usize = 8; // rwtodo usize? u8?
-const TILE_HEIGHT: usize = 8; // rwtodo usize? u8?
+const TILE_WIDTH: u8 = 8;
+const TILE_HEIGHT: u8 = 8;
+type TileLine = [u8; TILE_WIDTH as usize];
 
 const SHADE_0_FLAG: u8 = 0x04;
 
@@ -58,7 +59,7 @@ impl Renderer {
         tile_bank_address: u16,
         tile_index: i16, // Must be signed!
         tile_line_index: u8,
-        line_out: &mut [u8; TILE_WIDTH],
+        line_out: &mut TileLine,
     ) {
         // Convert to i32 to do arithmetic
         let tile_bank_address = tile_bank_address as i32;
@@ -71,19 +72,19 @@ impl Renderer {
 
         match line_data {
             0x0000 => {
-                *line_out = [self.shade_0; TILE_WIDTH];
+                *line_out = [self.shade_0; TILE_WIDTH as usize];
                 return;
             }
             0x00ff => {
-                *line_out = [self.shade_1; TILE_WIDTH];
+                *line_out = [self.shade_1; TILE_WIDTH as usize];
                 return;
             }
             0xff00 => {
-                *line_out = [self.shade_2; TILE_WIDTH];
+                *line_out = [self.shade_2; TILE_WIDTH as usize];
                 return;
             }
             0xffff => {
-                *line_out = [self.shade_3; TILE_WIDTH];
+                *line_out = [self.shade_3; TILE_WIDTH as usize];
                 return;
             }
             _ => (),
@@ -162,7 +163,7 @@ impl Renderer {
         tile_map_address_space: u16,
         tile_data_bank_address: u16,
         tile_line_index: u8,
-        line_out: &mut [u8; TILE_WIDTH],
+        line_out: &mut TileLine,
     ) {
         // Convert to i32 to do arithmetic
         let tile_map_address_space = tile_map_address_space as u16;
@@ -200,8 +201,8 @@ impl Renderer {
 
         let bg_y = ly + bg_scroll_y;
 
-        let tilegrid_y = bg_y / (TILE_HEIGHT as u8);
-        let tile_line_index = bg_y - tilegrid_y * (TILE_HEIGHT as u8);
+        let tilegrid_y = bg_y / TILE_HEIGHT;
+        let tile_line_index = bg_y - tilegrid_y * TILE_HEIGHT;
 
         let tile_map_address_space: u16 = if (control & LCDC_BG_TILE_MAP_SELECT) != 0 {
             0x9c00
@@ -223,13 +224,13 @@ impl Renderer {
             .expect("Tile destination should be of size Lcd::WIDTH=160");
 
         for tilegrid_x in 0u8..NUM_TILES_PER_BG_LINE {
-            let screen_x = tilegrid_x * (TILE_WIDTH as u8) - bg_scroll_x;
+            let screen_x = tilegrid_x * TILE_WIDTH - bg_scroll_x;
 
-            if screen_x <= (Lcd::WIDTH - TILE_WIDTH) as u8 {
+            if screen_x <= Lcd::WIDTH as u8 - TILE_WIDTH {
                 // Get the portion of the screen line where the tile should appear.
                 let screen_x: usize = screen_x.into();
-                let tile_line_dst: &mut [u8; TILE_WIDTH] = &mut screen_line
-                    [screen_x..(screen_x + TILE_WIDTH)]
+                let tile_line_dst: &mut TileLine = &mut screen_line
+                    [screen_x..(screen_x + usize::from(TILE_WIDTH))]
                     .try_into()
                     .expect("Tile destination should be of size TILE_WIDTH=8");
 
@@ -267,6 +268,123 @@ impl Renderer {
         }
     }
 
+    fn render_objects(&mut self, memory: &Memory) {
+        let control = memory.read(address::LCD_CONTROL);
+        let ly = memory.read(address::LCD_LY);
+
+        let object_height = if control & LCDC_DOUBLE_HEIGHT_OBJECTS != 0 {
+            16
+        } else {
+            8
+        };
+
+        // rwtodo: this is duplicated in render_background_line()
+        let first_pixel_of_screen_line = usize::from(ly) * Lcd::WIDTH;
+        let screen_line: &mut [u8; Lcd::WIDTH] = &mut self.pixels
+            [first_pixel_of_screen_line..(first_pixel_of_screen_line + Lcd::WIDTH)]
+            .try_into()
+            .expect("Tile destination should be of size Lcd::WIDTH=160");
+
+        for object_address in (0xfe00..=0xfe9c).step_by(4).rev() {
+            let ly: i16 = ly.into();
+            let translate_y = i16::from(memory.read(object_address)) - i16::from(TILE_HEIGHT) * 2;
+
+            if ly >= translate_y && ly < translate_y + object_height {
+                let translate_x: i16 =
+                    i16::from(memory.read(object_address + 1)) - i16::from(TILE_WIDTH);
+
+                // Ignore the lowest bit of the index if in double-height mode.
+                let tile_data_index = if object_height > 8 {
+                    memory.read(object_address + 2) & 0xfe
+                } else {
+                    memory.read(object_address + 2)
+                };
+
+                let object_flags = memory.read(object_address + 3);
+                let choose_palette_1 = object_flags & make_bit(4) != 0;
+                let flip_x = object_flags & make_bit(5) != 0;
+                let flip_y = object_flags & make_bit(6) != 0;
+                let behind_background = object_flags & make_bit(7) != 0;
+
+                let object_palette = if choose_palette_1 {
+                    memory.read(0xff49)
+                } else {
+                    memory.read(0xff48)
+                };
+                self.set_palette(object_palette);
+
+                let mut tile_line: TileLine = [0; TILE_WIDTH as usize];
+                {
+                    // rwtodo: redo this whole block, could have esoteric i8/u8 casting.
+                    // int8_t tile_line_index = flip_y ? (translate_y+7 - *ly) : *ly - translate_y; rwtodo
+                    let tile_line_index = (ly - translate_y) as u8; // rwtodo wrong; see above
+                    self.get_tile_line(
+                        memory,
+                        0x8000,
+                        tile_data_index.into(),
+                        tile_line_index,
+                        &mut tile_line,
+                    );
+                }
+
+                let screen_x_start = if translate_x < 0 { 0 } else { translate_x };
+                let screen_x_end = translate_x + i16::from(TILE_WIDTH);
+
+                if flip_x {
+                    // uint8_t tile_pixel_index = translate_x < 0 ? (TILE_WIDTH-1)+translate_x : (TILE_WIDTH-1);
+
+                    // if (behind_background) {
+                    //     uint8_t screen_x;
+                    //     for (screen_x = screen_x_start; screen_x < screen_x_end; screen_x++) {
+                    //         uint8_t tile_pixel = tile_line[tile_pixel_index--];
+
+                    //         if (!(tile_pixel & SHADE_0_FLAG) && screen_line[screen_x] & SHADE_0_FLAG) {
+                    //             screen_line[screen_x] = tile_pixel;
+                    //         }
+                    //     }
+                    // } else {
+                    //     uint8_t screen_x;
+                    //     for (screen_x = screen_x_start; screen_x < screen_x_end; screen_x++) {
+                    //         uint8_t tile_pixel = tile_line[tile_pixel_index--];
+
+                    //         if (!(tile_pixel & SHADE_0_FLAG)) {
+                    //             screen_line[screen_x] = tile_pixel;
+                    //         }
+                    //     }
+                    // }
+                } else {
+                    let mut tile_pixel_index = if translate_x < 0 {
+                        -translate_x as usize
+                    } else {
+                        0
+                    };
+
+                    if behind_background {
+                        for screen_x in screen_x_start..screen_x_end {
+                            let tile_pixel = tile_line[tile_pixel_index];
+                            tile_pixel_index += 1;
+
+                            if (tile_pixel & SHADE_0_FLAG) == 0
+                                && screen_line[screen_x as usize] & SHADE_0_FLAG != 0
+                            {
+                                screen_line[screen_x as usize] = tile_pixel;
+                            }
+                        }
+                    } else {
+                        for screen_x in screen_x_start..screen_x_end {
+                            let tile_pixel = tile_line[tile_pixel_index];
+                            tile_pixel_index += 1;
+
+                            if (tile_pixel & SHADE_0_FLAG) == 0 {
+                                screen_line[screen_x as usize] = tile_pixel;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     pub fn render_screen_line(&mut self, memory: &Memory) {
         let lcd_control = memory.read(address::LCD_CONTROL);
 
@@ -277,9 +395,13 @@ impl Renderer {
             self.render_background_line(memory);
 
             // if (lcd_control & LCDC_WINDOW_ENABLED) render_window_line();
+        } else {
+            // rwtodo: render white here.
         }
 
-        // rwtodo: only implemented background rendering for now.
+        if lcd_control & LCDC_OBJECTS_ENABLED != 0 {
+            self.render_objects(memory);
+        }
 
         // Convert from game boy 2-bit (with SHADE_0_FLAG) to target 8-bit.
         {
@@ -290,20 +412,20 @@ impl Renderer {
                 .try_into()
                 .expect("Screen line should be of size Lcd::WIDTH=160");
 
-            for pixel in screen_line {
+            for pixel in screen_line.iter() {
                 assert_eq!(*pixel, 42); // It's time to display pixels!
             }
 
-            // for pixel in screen_line.iter_mut() {
-            //     // The '& 0x03' below is to discard the SHADE_0_FLAG bit, which has already served its purpose in render_objects().
-            //     let mut pixel_i16 = i16::from(*pixel & 0x03);
+            for pixel in screen_line {
+                // The '& 0x03' below is to discard the SHADE_0_FLAG bit, which has already served its purpose in render_objects().
+                let mut pixel_i16 = i16::from(*pixel & 0x03);
 
-            //     // Flip the values and multiply to make white == 255.
-            //     pixel_i16 -= 3;
-            //     pixel_i16 *= -85;
+                // Flip the values and multiply to make white == 255.
+                pixel_i16 -= 3;
+                pixel_i16 *= -85;
 
-            //     *pixel = pixel_i16 as u8;
-            // }
+                *pixel = pixel_i16 as u8;
+            }
         }
     }
 }
