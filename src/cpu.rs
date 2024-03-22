@@ -3,7 +3,7 @@ mod instructions;
 use crate::address;
 use crate::interrupt;
 use crate::Memory;
-use crate::{bit, make_u16};
+use crate::{make_bit, make_u16};
 use instructions::FlagDiff;
 
 // rwtodo: dang, I've got to check every - and + to ensure wraparounds.
@@ -283,14 +283,14 @@ impl Cpu {
             0x05 => dec_u8(&mut self.registers.b, self.registers.f, 4), // DEC B
             0x06 => ld_reg8_mem8(&mut self.registers.b, memory.read(self.registers.pc + 1)), // LD B,x
             0x07 => {
-                let bit_7 = self.registers.a & bit(7) != 0;
+                let bit_7 = self.registers.a & make_bit(7) != 0;
 
                 if bit_7 {
                     self.registers.a <<= 1;
-                    self.registers.a |= bit(0);
+                    self.registers.a |= make_bit(0);
                 } else {
                     self.registers.a <<= 1;
-                    self.registers.a &= !bit(0);
+                    self.registers.a &= !make_bit(0);
                 }
 
                 CpuDiff::new(1, 4)
@@ -324,14 +324,14 @@ impl Cpu {
             0x0f => {
                 // Note, different flag manipulation to RRC.
                 let flag_c;
-                if self.registers.a & bit(0) != 0 {
+                if self.registers.a & make_bit(0) != 0 {
                     flag_c = true;
                     self.registers.a >>= 1;
-                    self.registers.a |= bit(7);
+                    self.registers.a |= make_bit(7);
                 } else {
                     flag_c = false;
                     self.registers.a >>= 1;
-                    self.registers.a &= !bit(7);
+                    self.registers.a &= !make_bit(7);
                 }
 
                 CpuDiff::new(1, 4)
@@ -359,12 +359,12 @@ impl Cpu {
             0x16 => ld_reg8_mem8(&mut self.registers.d, memory.read(self.registers.pc + 1)), // LD D,x
             0x17 => {
                 let previous_carry = self.registers.f & Registers::FLAG_CARRY != 0;
-                let bit_7 = self.registers.a & bit(7) != 0;
+                let bit_7 = self.registers.a & make_bit(7) != 0;
 
                 self.registers.a = self.registers.a << 1;
 
                 if previous_carry {
-                    self.registers.a |= bit(0);
+                    self.registers.a |= make_bit(0);
                 }
 
                 CpuDiff::new(1, 4)
@@ -393,11 +393,11 @@ impl Cpu {
             0x1e => ld_reg8_mem8(&mut self.registers.e, memory.read(self.registers.pc + 1)), // LD E,x
             0x1f => {
                 let previous_carry = self.registers.f & Registers::FLAG_CARRY != 0;
-                let new_carry = self.registers.a & bit(0) != 0;
+                let new_carry = self.registers.a & make_bit(0) != 0;
                 self.registers.a = self.registers.a >> 1;
 
                 if previous_carry {
-                    self.registers.a |= bit(7);
+                    self.registers.a |= make_bit(7);
                 }
 
                 CpuDiff::new(1, 4)

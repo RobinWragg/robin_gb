@@ -1,4 +1,5 @@
 use crate::address;
+use crate::make_bit;
 use crate::Lcd;
 use crate::Memory; // rwtodo: how is this working? shouldn't it be memory::Memory?
 
