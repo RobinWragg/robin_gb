@@ -23,6 +23,16 @@ const SHADE_0_FLAG: u8 = 0x04;
 // rwtodo: investigate how best to remove the unwrap()s in this file.
 // rwtodo: Look at how to minimize the integer casts. I can probably just have most stuff as usize.
 
+fn tile_line_ref(offset: usize, screen_line: &mut [u8; Lcd::WIDTH]) -> &mut TileLine {
+    // Grab a &[] where the tile should be written to.
+    let tile_line = &mut screen_line[offset..(offset + usize::from(TILE_WIDTH))];
+
+    // Turn it into a fixed-sized slice.
+    tile_line
+        .try_into()
+        .expect("Tile destination should be of size TILE_WIDTH=8")
+}
+
 pub struct Renderer {
     // rwtodo Do we really need a Renderer struct with state? or just shade state? I also don't like the naming of render::Renderer.
     shade_0: u8,
@@ -218,6 +228,8 @@ impl Renderer {
 
         // Get the slice of the screen representing the current horizontal line.
         let first_pixel_of_screen_line = usize::from(ly) * Lcd::WIDTH;
+
+        // rwtodo: this copies. grab the screen line as a param instead.
         let screen_line: &mut [u8; Lcd::WIDTH] = &mut self.pixels
             [first_pixel_of_screen_line..(first_pixel_of_screen_line + Lcd::WIDTH)]
             .try_into()
@@ -229,10 +241,8 @@ impl Renderer {
             if screen_x <= Lcd::WIDTH as u8 - TILE_WIDTH {
                 // Get the portion of the screen line where the tile should appear.
                 let screen_x: usize = screen_x.into();
-                let tile_line_dst: &mut TileLine = &mut screen_line
-                    [screen_x..(screen_x + usize::from(TILE_WIDTH))]
-                    .try_into()
-                    .expect("Tile destination should be of size TILE_WIDTH=8");
+                let tile_line_dst = tile_line_ref(screen_x, screen_line);
+                tile_line_dst[0] = 69;
 
                 self.get_bg_tile_line(
                     memory,
