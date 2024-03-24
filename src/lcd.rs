@@ -25,6 +25,7 @@ This signal is set to 1 if:
 pub struct Lcd {
     renderer: Renderer,
     elapsed_cycles: u32, // rwtodo if this needs to be i32, fine.
+    pixels: [u8; Lcd::PIXEL_COUNT],
 }
 
 impl Lcd {
@@ -37,6 +38,7 @@ impl Lcd {
             // rwtodo: Not sure what the shades should initialize to.
             renderer: render::Renderer::new(),
             elapsed_cycles: 0,
+            pixels: [42; Lcd::PIXEL_COUNT], // rwtodo: what the right initial pixel value?
         }
     }
 
@@ -102,7 +104,7 @@ impl Lcd {
             */
 
             if self.elapsed_cycles >= MODE_2_CYCLE_DURATION + MODE_3_CYCLE_DURATION {
-                *memory.direct_access(address::LCD_STATUS) |= 0x00; // H-blank.
+                *memory.direct_access(address::LCD_STATUS) |= 0x00; // H-blank. rwtodo isn't this a no-op?
 
                 if previous_mode != 0x00 && (memory.read(address::LCD_STATUS) & 0x08) != 0 {
                     interrupt::make_request(interrupt::FLAG_LCD_STAT, memory);
@@ -112,7 +114,13 @@ impl Lcd {
                 *memory.direct_access(address::LCD_STATUS) |= 0x03;
 
                 if previous_mode != 0x03 {
-                    self.renderer.render_screen_line(memory);
+                    let screen_line = self.renderer.render_screen_line(memory);
+                    let ly = usize::from(*memory.direct_access(address::LCD_LY));
+
+                    // rwtodo: do a memcpy equivalent instead of iterating.
+                    for x in 0..Lcd::WIDTH {
+                        self.pixels[ly * Lcd::WIDTH + x] = screen_line[x];
+                    }
                 }
             } else {
                 // Declare that the LCD is reading from OAM.
@@ -136,6 +144,6 @@ impl Lcd {
     }
 
     pub fn pixels(&self) -> &[u8; Lcd::PIXEL_COUNT] {
-        &self.renderer.pixels
+        &self.pixels
     }
 }

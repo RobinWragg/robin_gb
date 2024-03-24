@@ -39,7 +39,6 @@ pub struct Renderer {
     shade_1: u8,
     shade_2: u8,
     shade_3: u8,
-    pub pixels: [u8; Lcd::PIXEL_COUNT],
 }
 
 impl Renderer {
@@ -49,7 +48,6 @@ impl Renderer {
             shade_1: 0x00,
             shade_2: 0x00,
             shade_3: 0x00,
-            pixels: [42; Lcd::PIXEL_COUNT], // rwtodo: probably want to init it to 0xff.
         }
     }
 
@@ -203,7 +201,7 @@ impl Renderer {
         }
     }
 
-    fn render_background_line(&mut self, memory: &Memory) {
+    fn render_background_line(&mut self, memory: &Memory) -> [u8; Lcd::WIDTH] {
         let ly = memory.read(address::LCD_LY);
         let control = memory.read(address::LCD_CONTROL);
         let bg_scroll_y = memory.read(0xff42); // rwtodo const
@@ -226,14 +224,7 @@ impl Renderer {
             0x9000
         };
 
-        // Get the slice of the screen representing the current horizontal line.
-        let first_pixel_of_screen_line = usize::from(ly) * Lcd::WIDTH;
-
-        // rwtodo: this copies. grab the screen line as a param instead.
-        let screen_line: &mut [u8; Lcd::WIDTH] = &mut self.pixels
-            [first_pixel_of_screen_line..(first_pixel_of_screen_line + Lcd::WIDTH)]
-            .try_into()
-            .expect("Tile destination should be of size Lcd::WIDTH=160");
+        let mut screen_line: [u8; Lcd::WIDTH] = [42; Lcd::WIDTH]; // rwtodo 42
 
         for tilegrid_x in 0u8..NUM_TILES_PER_BG_LINE {
             let screen_x = tilegrid_x * TILE_WIDTH - bg_scroll_x;
@@ -241,8 +232,7 @@ impl Renderer {
             if screen_x <= Lcd::WIDTH as u8 - TILE_WIDTH {
                 // Get the portion of the screen line where the tile should appear.
                 let screen_x: usize = screen_x.into();
-                let tile_line_dst = tile_line_ref(screen_x, screen_line);
-                tile_line_dst[0] = 69;
+                let tile_line_dst = tile_line_ref(screen_x, &mut screen_line);
 
                 self.get_bg_tile_line(
                     memory,
@@ -276,9 +266,11 @@ impl Renderer {
               }
               */
         }
+
+        screen_line
     }
 
-    fn render_objects(&mut self, memory: &Memory) {
+    fn render_objects(&mut self, screen_line: &mut [u8; Lcd::WIDTH], memory: &Memory) {
         let control = memory.read(address::LCD_CONTROL);
         let ly = memory.read(address::LCD_LY);
 
@@ -287,13 +279,6 @@ impl Renderer {
         } else {
             8
         };
-
-        // rwtodo: this is duplicated in render_background_line()
-        let first_pixel_of_screen_line = usize::from(ly) * Lcd::WIDTH;
-        let screen_line: &mut [u8; Lcd::WIDTH] = &mut self.pixels
-            [first_pixel_of_screen_line..(first_pixel_of_screen_line + Lcd::WIDTH)]
-            .try_into()
-            .expect("Tile destination should be of size Lcd::WIDTH=160");
 
         for object_address in (0xfe00..=0xfe9c).step_by(4).rev() {
             let ly: i16 = ly.into();
@@ -395,47 +380,39 @@ impl Renderer {
         }
     }
 
-    pub fn render_screen_line(&mut self, memory: &Memory) {
+    pub fn render_screen_line(&mut self, memory: &Memory) -> [u8; Lcd::WIDTH] {
         let lcd_control = memory.read(address::LCD_CONTROL);
 
-        if (lcd_control & LCDC_BG_AND_WINDOW_ENABLED) != 0 {
+        let mut screen_line = if (lcd_control & LCDC_BG_AND_WINDOW_ENABLED) != 0 {
             let bg_palette = memory.read(0xff47); // rwtodo const
             self.set_palette(bg_palette);
 
-            self.render_background_line(memory);
+            self.render_background_line(memory)
 
-            // if (lcd_control & LCDC_WINDOW_ENABLED) render_window_line();
+            // if (lcd_control & LCDC_WINDOW_ENABLED) render_window_line(); rwtodo
         } else {
             // rwtodo: render white here.
-        }
+            [0; Lcd::WIDTH]
+        };
 
         if lcd_control & LCDC_OBJECTS_ENABLED != 0 {
-            self.render_objects(memory);
+            self.render_objects(&mut screen_line, memory);
         }
 
         // Convert from game boy 2-bit (with SHADE_0_FLAG) to target 8-bit.
-        {
-            let ly = memory.read(address::LCD_LY);
-            let first_pixel_of_screen_line = usize::from(ly) * Lcd::WIDTH;
-            let screen_line: &mut [u8; Lcd::WIDTH] = &mut self.pixels
-                [first_pixel_of_screen_line..(first_pixel_of_screen_line + Lcd::WIDTH)]
-                .try_into()
-                .expect("Screen line should be of size Lcd::WIDTH=160");
+        /*
+        for pixel in &mut screen_line {
+            // The '& 0x03' below is to discard the SHADE_0_FLAG bit, which has already served its purpose in render_objects(). rwtodo move this to render_objects()?
+            let mut pixel_i16 = i16::from(*pixel & 0x03);
 
-            for pixel in screen_line.iter() {
-                assert_eq!(*pixel, 42); // It's time to display pixels!
-            }
+            // Flip the values and multiply to make white == 255.
+            pixel_i16 -= 3;
+            pixel_i16 *= -85;
 
-            for pixel in screen_line {
-                // The '& 0x03' below is to discard the SHADE_0_FLAG bit, which has already served its purpose in render_objects().
-                let mut pixel_i16 = i16::from(*pixel & 0x03);
-
-                // Flip the values and multiply to make white == 255.
-                pixel_i16 -= 3;
-                pixel_i16 *= -85;
-
-                *pixel = pixel_i16 as u8;
-            }
+            *pixel = pixel_i16 as u8;
         }
+        */
+
+        screen_line
     }
 }
