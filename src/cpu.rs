@@ -460,8 +460,8 @@ impl Cpu {
             } // DAA
             0x28 => {
                 if self.registers.f & Registers::FLAG_ZERO == 0 {
-                    let x = immediate_u8() as i8;
-                    CpuDiff::new((2 + x).into(), 12)
+                    let imm = immediate_u8() as i8;
+                    CpuDiff::new((2 + imm).into(), 12) // rwtodo handle wraparound here.
                 } else {
                     CpuDiff::new(2, 8)
                 }
@@ -828,10 +828,7 @@ impl Cpu {
                 memory,
             ), // CALL Z,xx
             0xcd => call(true, &mut self.registers, memory),                 // CALL xx
-            0xce => {
-                let x = immediate_u8();
-                adc(x, &mut self.registers, 2, 8)
-            } // ADC A,x
+            0xce => adc(immediate_u8(), &mut self.registers, 2, 8),          // ADC A,x
             0xcf => rst(0x08, &mut self.registers, memory),                  // RST 08h
             0xd0 => {
                 if self.registers.f & Registers::FLAG_CARRY == 0 {
@@ -865,11 +862,8 @@ impl Cpu {
                 stack_push(self.registers.de(), &mut self.registers.sp, memory);
                 CpuDiff::new(1, 16)
             } // PUSH DE
-            0xd6 => {
-                let x = immediate_u8();
-                sub(x, &mut self.registers, 2, 8)
-            } // SUB x
-            0xd7 => rst(0x10, &mut self.registers, memory), // RST 10h
+            0xd6 => sub(immediate_u8(), &mut self.registers, 2, 8), // SUB x
+            0xd7 => rst(0x10, &mut self.registers, memory),         // RST 10h
             0xd8 => {
                 if self.registers.f & Registers::FLAG_CARRY != 0 {
                     self.registers.pc = stack_pop(&mut self.registers.sp, memory);
@@ -898,11 +892,8 @@ impl Cpu {
                 memory,
             ), // CALL C,xx
             0xdd => unreachable!("Invalid opcode"),
-            0xde => {
-                let x = immediate_u8();
-                sbc(x, &mut self.registers, 2, 8)
-            } // SBC A,x
-            0xdf => rst(0x18, &mut self.registers, memory), // RST 18h
+            0xde => sbc(immediate_u8(), &mut self.registers, 2, 8), // SBC A,x
+            0xdf => rst(0x18, &mut self.registers, memory),         // RST 18h
             0xe0 => {
                 memory.write(0xff00 + u16::from(immediate_u8()), self.registers.a);
                 CpuDiff::new(2, 12)
@@ -922,20 +913,20 @@ impl Cpu {
                 stack_push(self.registers.hl(), &mut self.registers.sp, memory);
                 CpuDiff::new(1, 16)
             } // PUSH HL
-            0xe6 => {
-                let x = immediate_u8();
-                and(x, &mut self.registers.a, 2, 8)
-            } // AND x
-            0xe7 => rst(0x20, &mut self.registers, memory), // RST 20H
+            0xe6 => and(immediate_u8(), &mut self.registers.a, 2, 8), // AND x
+            0xe7 => rst(0x20, &mut self.registers, memory),           // RST 20H
             0xe8 => {
                 // rwtodo: This is likely wrong.
-                let x: i32 = (immediate_u8() as i8).into();
+                let imm: i32 = (immediate_u8() as i8).into();
 
                 // rwtodo: Investigate what happens with this double XOR.
                 let sp32: i32 = self.registers.sp.into();
-                let xor_result = sp32 ^ x ^ (sp32 + x);
+                let xor_result = sp32 ^ imm ^ (sp32 + imm);
 
-                self.registers.sp = self.registers.sp.wrapping_add_signed(x.try_into().unwrap());
+                self.registers.sp = self
+                    .registers
+                    .sp
+                    .wrapping_add_signed(imm.try_into().unwrap());
 
                 CpuDiff::new(2, 16)
                     .flag_z(false)
@@ -980,13 +971,13 @@ impl Cpu {
             0xf7 => rst(0x30, &mut self.registers, memory),          // RST 30H
             0xf8 => {
                 // rwtodo: This is likely wrong.
-                let x: i32 = (immediate_u8() as i8).into();
+                let imm: i32 = (immediate_u8() as i8).into();
 
                 // rwtodo: Investigate what happens with this double XOR.
                 let sp32: i32 = self.registers.sp.into();
-                let xor_result = sp32 ^ x ^ (sp32 + x);
+                let xor_result = sp32 ^ imm ^ (sp32 + imm);
 
-                self.registers.set_hl((sp32 + x) as u16);
+                self.registers.set_hl((sp32 + imm) as u16);
 
                 CpuDiff::new(2, 12)
                     .flag_z(false)
@@ -1010,17 +1001,17 @@ impl Cpu {
             0xfc => unreachable!("Invalid opcode"),
             0xfd => unreachable!("Invalid opcode"),
             0xfe => {
-                let x = immediate_u8();
+                let imm = immediate_u8();
 
                 let half_carry = subtraction_produces_u8_half_carry(
                     self.registers.a,
-                    x,
+                    imm,
                     self.registers.f,
                     false,
                 );
-                let full_carry = subtraction_produces_u8_full_carry(self.registers.a, x);
+                let full_carry = subtraction_produces_u8_full_carry(self.registers.a, imm);
 
-                let sub_result = self.registers.a.wrapping_sub(x);
+                let sub_result = self.registers.a.wrapping_sub(imm);
 
                 CpuDiff::new(2, 8)
                     .flag_z(sub_result == 0)
