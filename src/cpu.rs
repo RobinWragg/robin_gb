@@ -8,17 +8,11 @@ use instructions::FlagDiff;
 
 // rwtodo: dang, I've got to check every - and + to ensure wraparounds.
 
-//rwtodo: I can probably do something nifty with Rust attributes to make the "instruction" functions more ergonomic.
-
 // rwtodo: Apparently STOP is like HALT except the LCD is inoperational as well, and the "stopped" state is only exited when a button is pressed. Look for better documentation on it.
 
 fn stack_push(value_to_push: u16, sp: &mut u16, memory: &mut Memory) {
-    let bytes = value_to_push.to_le_bytes();
     *sp -= 2;
-
-    // rwtodo: this can be memory.write_u16, right?
-    memory.write(*sp, bytes[0]);
-    memory.write(*sp + 1, bytes[1]);
+    memory.write_u16(*sp, value_to_push);
 }
 
 fn stack_pop(sp: &mut u16, memory: &Memory) -> u16 {
