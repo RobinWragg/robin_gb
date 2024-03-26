@@ -24,17 +24,19 @@ fn stack_pop(sp: &mut u16, memory: &Memory) -> u16 {
 type CycleCount = u8;
 
 pub struct Registers {
+    // General purpose registers
     a: u8,
     b: u8,
     c: u8,
     d: u8,
     e: u8,
-    f: u8,
+    f: u8, // Flag register
     h: u8,
     l: u8,
-    pc: u16,
-    sp: u16,
-    ime: bool,
+
+    pc: u16,   // Program counter
+    sp: u16,   // Stack pointer
+    ime: bool, // rwtodo
 }
 
 impl Registers {
@@ -252,6 +254,10 @@ impl Cpu {
 
         let opcode = memory.read(self.registers.pc);
 
+        // Getters for the data immediately following the program counter (pc).
+        let immediate_u8 = || memory.read(self.registers.pc + 1);
+        let immediate_u16 = || memory.read_u16(self.registers.pc + 1);
+
         // print!("{:#06x} {:#04x}: ", self.registers.pc, opcode);
         // print_instruction(self.registers.pc, memory);
         // println!();
@@ -261,8 +267,7 @@ impl Cpu {
         let diff: CpuDiff = match opcode {
             0x00 => nop(), // NOP
             0x01 => {
-                self.registers
-                    .set_bc(memory.read_u16(self.registers.pc + 1));
+                self.registers.set_bc(immediate_u16());
                 CpuDiff::new(3, 12)
             } // LD BC,xx
             0x02 => {
@@ -275,7 +280,7 @@ impl Cpu {
             } // INC BC
             0x04 => inc_u8(&mut self.registers.b, self.registers.f, 4), // INC B
             0x05 => dec_u8(&mut self.registers.b, self.registers.f, 4), // DEC B
-            0x06 => ld_reg8_mem8(&mut self.registers.b, memory.read(self.registers.pc + 1)), // LD B,x
+            0x06 => ld_reg8_mem8(&mut self.registers.b, immediate_u8()), // LD B,x
             0x07 => {
                 let bit_7 = self.registers.a & make_bit(7) != 0;
 
@@ -294,7 +299,7 @@ impl Cpu {
                     .flag_c(bit_7)
             } // RLCA
             0x08 => {
-                memory.write_u16(memory.read_u16(self.registers.pc + 1), self.registers.sp);
+                memory.write_u16(immediate_u16(), self.registers.sp);
                 CpuDiff::new(3, 20)
             } // LD (xx),SP
             0x09 => {
@@ -314,7 +319,7 @@ impl Cpu {
             } // DEC BC
             0x0c => inc_u8(&mut self.registers.c, self.registers.f, 4), // INC C
             0x0d => dec_u8(&mut self.registers.c, self.registers.f, 4), // DEC C
-            0x0e => ld_reg8_mem8(&mut self.registers.c, memory.read(self.registers.pc + 1)), // LD C,x
+            0x0e => ld_reg8_mem8(&mut self.registers.c, immediate_u8()), // LD C,x
             0x0f => {
                 // Note, different flag manipulation to RRC.
                 let flag_c;
@@ -336,8 +341,7 @@ impl Cpu {
             } // RRCA
             0x10 => todo!(), // STOP 0
             0x11 => {
-                self.registers
-                    .set_de(memory.read_u16(self.registers.pc + 1));
+                self.registers.set_de(immediate_u16());
                 CpuDiff::new(3, 12)
             } // LD DE,xx
             0x12 => {
@@ -350,7 +354,7 @@ impl Cpu {
             } // INC DE
             0x14 => inc_u8(&mut self.registers.d, self.registers.f, 4), // INC D
             0x15 => dec_u8(&mut self.registers.d, self.registers.f, 4), // DEC D
-            0x16 => ld_reg8_mem8(&mut self.registers.d, memory.read(self.registers.pc + 1)), // LD D,x
+            0x16 => ld_reg8_mem8(&mut self.registers.d, immediate_u8()), // LD D,x
             0x17 => {
                 let previous_carry = self.registers.f & Registers::FLAG_CARRY != 0;
                 let bit_7 = self.registers.a & make_bit(7) != 0;
@@ -367,7 +371,7 @@ impl Cpu {
                     .flag_h(false)
                     .flag_c(bit_7)
             } // RLA
-            0x18 => CpuDiff::new(2 + i16::from(memory.read(self.registers.pc + 1) as i8), 12), // JR s
+            0x18 => CpuDiff::new(2 + i16::from(immediate_u8() as i8), 12), // JR s
             0x19 => {
                 let mut hl = self.registers.hl();
                 let diff = add_reg16(self.registers.de(), &mut hl);
@@ -384,7 +388,7 @@ impl Cpu {
             } // DEC DE
             0x1c => inc_u8(&mut self.registers.e, self.registers.f, 4), // INC E
             0x1d => dec_u8(&mut self.registers.e, self.registers.f, 4), // DEC E
-            0x1e => ld_reg8_mem8(&mut self.registers.e, memory.read(self.registers.pc + 1)), // LD E,x
+            0x1e => ld_reg8_mem8(&mut self.registers.e, immediate_u8()), // LD E,x
             0x1f => {
                 let previous_carry = self.registers.f & Registers::FLAG_CARRY != 0;
                 let new_carry = self.registers.a & make_bit(0) != 0;
@@ -402,14 +406,13 @@ impl Cpu {
             } // RRA
             0x20 => {
                 if self.registers.f & Registers::FLAG_ZERO == 0 {
-                    CpuDiff::new(2 + i16::from(memory.read(self.registers.pc + 1) as i8), 12)
+                    CpuDiff::new(2 + i16::from(immediate_u8() as i8), 12)
                 } else {
                     CpuDiff::new(2, 8)
                 }
             } // JR NZ,s
             0x21 => {
-                self.registers
-                    .set_hl(memory.read_u16(self.registers.pc + 1));
+                self.registers.set_hl(immediate_u16());
                 CpuDiff::new(3, 12)
             } // LD HL,xx
             0x22 => {
@@ -423,7 +426,7 @@ impl Cpu {
             } // INC HL
             0x24 => inc_u8(&mut self.registers.h, self.registers.f, 4), // INC H
             0x25 => dec_u8(&mut self.registers.h, self.registers.f, 4), // DEC H
-            0x26 => ld_reg8_mem8(&mut self.registers.h, memory.read(self.registers.pc + 1)), // LD H,x
+            0x26 => ld_reg8_mem8(&mut self.registers.h, immediate_u8()), // LD H,x
             0x27 => {
                 let mut new_a: u16 = self.registers.a.into();
 
@@ -457,7 +460,7 @@ impl Cpu {
             } // DAA
             0x28 => {
                 if self.registers.f & Registers::FLAG_ZERO == 0 {
-                    let x = memory.read(self.registers.pc + 1) as i8;
+                    let x = immediate_u8() as i8;
                     CpuDiff::new((2 + x).into(), 12)
                 } else {
                     CpuDiff::new(2, 8)
@@ -480,20 +483,20 @@ impl Cpu {
             } // DEC HL
             0x2c => inc_u8(&mut self.registers.l, self.registers.f, 4), // INC L
             0x2d => dec_u8(&mut self.registers.l, self.registers.f, 4), // DEC L
-            0x2e => ld_reg8_mem8(&mut self.registers.l, memory.read(self.registers.pc + 1)), // LD L,x
+            0x2e => ld_reg8_mem8(&mut self.registers.l, immediate_u8()), // LD L,x
             0x2f => {
                 self.registers.a ^= 0xff;
                 CpuDiff::new(1, 4).flag_n(true).flag_h(true)
             } // CPL
             0x30 => {
                 if self.registers.f & Registers::FLAG_CARRY == 0 {
-                    CpuDiff::new(2 + i16::from(memory.read(self.registers.pc + 1) as i8), 12)
+                    CpuDiff::new(2 + i16::from(immediate_u8() as i8), 12)
                 } else {
                     CpuDiff::new(2, 8)
                 }
             } // JR NC,s
             0x31 => {
-                self.registers.sp = memory.read_u16(self.registers.pc + 1);
+                self.registers.sp = immediate_u16();
                 CpuDiff::new(3, 12)
             } // LD SP,xx
             0x32 => {
@@ -518,13 +521,13 @@ impl Cpu {
                 diff
             } // DEC (HL)
             0x36 => {
-                memory.write(self.registers.hl(), memory.read(self.registers.pc + 1));
+                memory.write(self.registers.hl(), immediate_u8());
                 CpuDiff::new(2, 12)
             } // LD (HL),x
-            0x37 => CpuDiff::new(1, 4).flag_n(false).flag_h(false).flag_c(true),             // SCF
+            0x37 => CpuDiff::new(1, 4).flag_n(false).flag_h(false).flag_c(true), // SCF
             0x38 => {
                 if self.registers.f & Registers::FLAG_CARRY != 0 {
-                    CpuDiff::new(2 + i16::from(memory.read(self.registers.pc + 1) as i8), 12)
+                    CpuDiff::new(2 + i16::from(immediate_u8() as i8), 12)
                 } else {
                     CpuDiff::new(2, 8)
                 }
@@ -546,7 +549,7 @@ impl Cpu {
             } // DEC SP
             0x3c => inc_u8(&mut self.registers.a, self.registers.f, 4), // INC A
             0x3d => dec_u8(&mut self.registers.a, self.registers.f, 4), // DEC A
-            0x3e => ld_reg8_mem8(&mut self.registers.a, memory.read(self.registers.pc + 1)), // LD A,x
+            0x3e => ld_reg8_mem8(&mut self.registers.a, immediate_u8()), // LD A,x
             0x3f => {
                 let previous_carry = self.registers.f & Registers::FLAG_CARRY != 0;
                 CpuDiff::new(1, 4)
@@ -554,7 +557,7 @@ impl Cpu {
                     .flag_h(false)
                     .flag_c(previous_carry)
             } // CCF
-            0x40 => nop(),                                                 // LD B,B
+            0x40 => nop(), // LD B,B
             0x41 => ld_reg8_reg8(&mut self.registers.b, self.registers.c), // LD B,C
             0x42 => ld_reg8_reg8(&mut self.registers.b, self.registers.d), // LD B,D
             0x43 => ld_reg8_reg8(&mut self.registers.b, self.registers.e), // LD B,E
@@ -566,7 +569,7 @@ impl Cpu {
             } // LD B,(HL)
             0x47 => ld_reg8_reg8(&mut self.registers.b, self.registers.a), // LD B,A
             0x48 => ld_reg8_reg8(&mut self.registers.c, self.registers.b), // LD C,B
-            0x49 => nop(),                                                 // LD C,C
+            0x49 => nop(), // LD C,C
             0x4a => ld_reg8_reg8(&mut self.registers.c, self.registers.d), // LD C,D
             0x4b => ld_reg8_reg8(&mut self.registers.c, self.registers.e), // LD C,E
             0x4c => ld_reg8_reg8(&mut self.registers.c, self.registers.h), // LD C,H
@@ -578,7 +581,7 @@ impl Cpu {
             0x4f => ld_reg8_reg8(&mut self.registers.c, self.registers.a), // LD C,A
             0x50 => ld_reg8_reg8(&mut self.registers.d, self.registers.b), // LD D,B
             0x51 => ld_reg8_reg8(&mut self.registers.d, self.registers.c), // LD D,C
-            0x52 => nop(),                                                 // LD D,D
+            0x52 => nop(), // LD D,D
             0x53 => ld_reg8_reg8(&mut self.registers.d, self.registers.e), // LD D,E
             0x54 => ld_reg8_reg8(&mut self.registers.d, self.registers.h), // LD D,H
             0x55 => ld_reg8_reg8(&mut self.registers.d, self.registers.l), // LD D,L
@@ -590,7 +593,7 @@ impl Cpu {
             0x58 => ld_reg8_reg8(&mut self.registers.e, self.registers.b), // LD E,B
             0x59 => ld_reg8_reg8(&mut self.registers.e, self.registers.c), // LD E,C
             0x5a => ld_reg8_reg8(&mut self.registers.e, self.registers.d), // LD E,D
-            0x5b => nop(),                                                 // LD E,E
+            0x5b => nop(), // LD E,E
             0x5c => ld_reg8_reg8(&mut self.registers.e, self.registers.h), // LD E,H
             0x5d => ld_reg8_reg8(&mut self.registers.e, self.registers.l), // LD E,L
             0x5e => {
@@ -602,7 +605,7 @@ impl Cpu {
             0x61 => ld_reg8_reg8(&mut self.registers.h, self.registers.c), // LD H,C
             0x62 => ld_reg8_reg8(&mut self.registers.h, self.registers.d), // LD H,D
             0x63 => ld_reg8_reg8(&mut self.registers.h, self.registers.e), // LD H,E
-            0x64 => nop(),                                                 // LD H,H
+            0x64 => nop(), // LD H,H
             0x65 => ld_reg8_reg8(&mut self.registers.h, self.registers.l), // LD H,L
             0x66 => {
                 self.registers.h = memory.read(self.registers.hl());
@@ -614,7 +617,7 @@ impl Cpu {
             0x6a => ld_reg8_reg8(&mut self.registers.l, self.registers.d), // LD L,D
             0x6b => ld_reg8_reg8(&mut self.registers.l, self.registers.e), // LD L,E
             0x6c => ld_reg8_reg8(&mut self.registers.l, self.registers.h), // LD L,H
-            0x6d => nop(),                                                 // LD L,L
+            0x6d => nop(), // LD L,L
             0x6e => {
                 self.registers.l = memory.read(self.registers.hl());
                 CpuDiff::new(1, 8)
@@ -689,12 +692,12 @@ impl Cpu {
                 self.registers.a = self.registers.a;
                 CpuDiff::new(1, 4)
             } // LD A,A
-            0x80 => add_u8(self.registers.b, &mut self.registers, 1, 4),   // ADD A,B
-            0x81 => add_u8(self.registers.c, &mut self.registers, 1, 4),   // ADD A,C
-            0x82 => add_u8(self.registers.d, &mut self.registers, 1, 4),   // ADD A,D
-            0x83 => add_u8(self.registers.e, &mut self.registers, 1, 4),   // ADD A,E
-            0x84 => add_u8(self.registers.h, &mut self.registers, 1, 4),   // ADD A,H
-            0x85 => add_u8(self.registers.l, &mut self.registers, 1, 4),   // ADD A,L
+            0x80 => add_u8(self.registers.b, &mut self.registers, 1, 4), // ADD A,B
+            0x81 => add_u8(self.registers.c, &mut self.registers, 1, 4), // ADD A,C
+            0x82 => add_u8(self.registers.d, &mut self.registers, 1, 4), // ADD A,D
+            0x83 => add_u8(self.registers.e, &mut self.registers, 1, 4), // ADD A,E
+            0x84 => add_u8(self.registers.h, &mut self.registers, 1, 4), // ADD A,H
+            0x85 => add_u8(self.registers.l, &mut self.registers, 1, 4), // ADD A,L
             0x86 => add_u8(memory.read(self.registers.hl()), &mut self.registers, 1, 8), // ADD A,(HL)
             0x87 => add_u8(self.registers.a, &mut self.registers, 1, 4),                 // ADD A,A
             0x88 => adc(self.registers.b, &mut self.registers, 1, 4),                    // ADC A,B
@@ -777,14 +780,14 @@ impl Cpu {
             } // POP BC
             0xc2 => {
                 if self.registers.f & Registers::FLAG_ZERO == 0 {
-                    self.registers.pc = memory.read_u16(self.registers.pc + 1);
+                    self.registers.pc = immediate_u16();
                     CpuDiff::new(0, 16)
                 } else {
                     CpuDiff::new(3, 12)
                 }
             } // JP NZ,xx
             0xc3 => {
-                self.registers.pc = memory.read_u16(self.registers.pc + 1);
+                self.registers.pc = immediate_u16();
                 CpuDiff::new(0, 16)
             } // JP xx
             0xc4 => call(
@@ -796,12 +799,7 @@ impl Cpu {
                 stack_push(self.registers.bc(), &mut self.registers.sp, memory);
                 CpuDiff::new(1, 16)
             } // PUSH BC
-            0xc6 => add_u8(
-                memory.read(self.registers.pc + 1),
-                &mut self.registers,
-                2,
-                8,
-            ), // ADD A,x
+            0xc6 => add_u8(immediate_u8(), &mut self.registers, 2, 8), // ADD A,x
             0xc7 => rst(0x00, &mut self.registers, memory),          // RST 00h
             0xc8 => {
                 if self.registers.f & Registers::FLAG_ZERO != 0 {
@@ -817,7 +815,7 @@ impl Cpu {
             } // RET
             0xca => {
                 if self.registers.f & Registers::FLAG_ZERO != 0 {
-                    self.registers.pc = memory.read_u16(self.registers.pc + 1);
+                    self.registers.pc = immediate_u16();
                     CpuDiff::new(0, 16)
                 } else {
                     CpuDiff::new(3, 12)
@@ -831,7 +829,7 @@ impl Cpu {
             ), // CALL Z,xx
             0xcd => call(true, &mut self.registers, memory),                 // CALL xx
             0xce => {
-                let x = memory.read(self.registers.pc + 1);
+                let x = immediate_u8();
                 adc(x, &mut self.registers, 2, 8)
             } // ADC A,x
             0xcf => rst(0x08, &mut self.registers, memory),                  // RST 08h
@@ -850,7 +848,7 @@ impl Cpu {
             }
             0xd2 => {
                 if self.registers.f & Registers::FLAG_CARRY == 0 {
-                    self.registers.pc = memory.read_u16(self.registers.pc + 1);
+                    self.registers.pc = immediate_u16();
                     CpuDiff::new(0, 16)
                 } else {
                     CpuDiff::new(3, 12)
@@ -868,7 +866,7 @@ impl Cpu {
                 CpuDiff::new(1, 16)
             } // PUSH DE
             0xd6 => {
-                let x = memory.read(self.registers.pc + 1);
+                let x = immediate_u8();
                 sub(x, &mut self.registers, 2, 8)
             } // SUB x
             0xd7 => rst(0x10, &mut self.registers, memory), // RST 10h
@@ -887,7 +885,7 @@ impl Cpu {
             } // RETI
             0xda => {
                 if self.registers.f & Registers::FLAG_CARRY != 0 {
-                    self.registers.pc = memory.read_u16(self.registers.pc + 1);
+                    self.registers.pc = immediate_u16();
                     CpuDiff::new(0, 16)
                 } else {
                     CpuDiff::new(3, 12)
@@ -901,15 +899,12 @@ impl Cpu {
             ), // CALL C,xx
             0xdd => unreachable!("Invalid opcode"),
             0xde => {
-                let x = memory.read(self.registers.pc + 1);
+                let x = immediate_u8();
                 sbc(x, &mut self.registers, 2, 8)
             } // SBC A,x
             0xdf => rst(0x18, &mut self.registers, memory), // RST 18h
             0xe0 => {
-                memory.write(
-                    0xff00 + u16::from(memory.read(self.registers.pc + 1)),
-                    self.registers.a,
-                );
+                memory.write(0xff00 + u16::from(immediate_u8()), self.registers.a);
                 CpuDiff::new(2, 12)
             } // LDH (ff00+x),A
             0xe1 => {
@@ -928,13 +923,13 @@ impl Cpu {
                 CpuDiff::new(1, 16)
             } // PUSH HL
             0xe6 => {
-                let x = memory.read(self.registers.pc + 1);
+                let x = immediate_u8();
                 and(x, &mut self.registers.a, 2, 8)
             } // AND x
             0xe7 => rst(0x20, &mut self.registers, memory), // RST 20H
             0xe8 => {
                 // rwtodo: This is likely wrong.
-                let x: i32 = (memory.read(self.registers.pc + 1) as i8).into();
+                let x: i32 = (immediate_u8() as i8).into();
 
                 // rwtodo: Investigate what happens with this double XOR.
                 let sp32: i32 = self.registers.sp.into();
@@ -953,18 +948,17 @@ impl Cpu {
                 CpuDiff::new(0, 4)
             } // JP (HL)
             0xea => {
-                memory.write(memory.read_u16(self.registers.pc + 1), self.registers.a);
+                memory.write(immediate_u16(), self.registers.a);
                 CpuDiff::new(3, 16)
             } // LD (x),A
             0xeb..=0xed => unreachable!("Invalid opcode"),
             0xee => {
-                let x = memory.read(self.registers.pc + 1);
+                let x = immediate_u8();
                 xor(x, &mut self.registers.a, 2, 4)
             } // XOR x
             0xef => rst(0x28, &mut self.registers, memory), // RST 28H
             0xf0 => {
-                self.registers.a =
-                    memory.read(0xff00 + u16::from(memory.read(self.registers.pc + 1)));
+                self.registers.a = memory.read(0xff00 + u16::from(immediate_u8()));
                 CpuDiff::new(2, 12)
             } // LDH A,(0xff00+x)
             0xf1 => {
@@ -986,13 +980,13 @@ impl Cpu {
                 CpuDiff::new(1, 16)
             } // PUSH AF
             0xf6 => {
-                let x = memory.read(self.registers.pc + 1);
+                let x = immediate_u8();
                 or(x, &mut self.registers.a, 2, 8)
             } // OR x
             0xf7 => rst(0x30, &mut self.registers, memory), // RST 30H
             0xf8 => {
                 // rwtodo: This is likely wrong.
-                let x: i32 = (memory.read(self.registers.pc + 1) as i8).into();
+                let x: i32 = (immediate_u8() as i8).into();
 
                 // rwtodo: Investigate what happens with this double XOR.
                 let sp32: i32 = self.registers.sp.into();
@@ -1011,7 +1005,7 @@ impl Cpu {
                 CpuDiff::new(1, 8)
             } // LD SP,HL
             0xfa => {
-                let address = u16::from(memory.read_u16(self.registers.pc + 1));
+                let address = u16::from(immediate_u16());
                 self.registers.a = memory.read(address);
                 CpuDiff::new(3, 16)
             } // LD A,(xx)
@@ -1022,7 +1016,7 @@ impl Cpu {
             0xfc => unreachable!("Invalid opcode"),
             0xfd => unreachable!("Invalid opcode"),
             0xfe => {
-                let byte_0 = memory.read(self.registers.pc + 1);
+                let byte_0 = immediate_u8();
 
                 let half_carry = subtraction_produces_u8_half_carry(
                     self.registers.a,

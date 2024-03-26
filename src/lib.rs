@@ -158,7 +158,7 @@ impl GameBoy {
     }
 
     // rwtodo: returns true if not vblank. not a fan. enum?
-    fn emulate_next_lcd_line(&mut self) -> bool {
+    fn emulate_next_line_of_frame(&mut self) -> bool {
         let previous_lcd_ly = *self.memory.direct_access(address::LCD_LY);
 
         let mut total_elapsed_cycles_this_h_blank: u32 = 0;
@@ -180,13 +180,11 @@ impl GameBoy {
     }
 
     pub fn emulate_next_frame(&mut self) -> &[u8; Lcd::PIXEL_COUNT] {
-        // rwtodo run cpu etc
-
         // Call the function until the vblank phase is exited.
-        while self.emulate_next_lcd_line() == false {}
+        while self.emulate_next_line_of_frame() == false {}
 
         // Call the function until the vblank phase is entered again.
-        while self.emulate_next_lcd_line() == true {}
+        while self.emulate_next_line_of_frame() == true {}
 
         // The screen has now been fully updated.
         self.lcd.pixels()
