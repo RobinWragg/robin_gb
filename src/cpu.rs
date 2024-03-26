@@ -952,11 +952,8 @@ impl Cpu {
                 CpuDiff::new(3, 16)
             } // LD (x),A
             0xeb..=0xed => unreachable!("Invalid opcode"),
-            0xee => {
-                let x = immediate_u8();
-                xor(x, &mut self.registers.a, 2, 4)
-            } // XOR x
-            0xef => rst(0x28, &mut self.registers, memory), // RST 28H
+            0xee => xor(immediate_u8(), &mut self.registers.a, 2, 4), // XOR x
+            0xef => rst(0x28, &mut self.registers, memory),           // RST 28H
             0xf0 => {
                 self.registers.a = memory.read(0xff00 + u16::from(immediate_u8()));
                 CpuDiff::new(2, 12)
@@ -979,11 +976,8 @@ impl Cpu {
                 stack_push(self.registers.af(), &mut self.registers.sp, memory);
                 CpuDiff::new(1, 16)
             } // PUSH AF
-            0xf6 => {
-                let x = immediate_u8();
-                or(x, &mut self.registers.a, 2, 8)
-            } // OR x
-            0xf7 => rst(0x30, &mut self.registers, memory), // RST 30H
+            0xf6 => or(immediate_u8(), &mut self.registers.a, 2, 8), // OR x
+            0xf7 => rst(0x30, &mut self.registers, memory),          // RST 30H
             0xf8 => {
                 // rwtodo: This is likely wrong.
                 let x: i32 = (immediate_u8() as i8).into();
@@ -1016,17 +1010,17 @@ impl Cpu {
             0xfc => unreachable!("Invalid opcode"),
             0xfd => unreachable!("Invalid opcode"),
             0xfe => {
-                let byte_0 = immediate_u8();
+                let x = immediate_u8();
 
                 let half_carry = subtraction_produces_u8_half_carry(
                     self.registers.a,
-                    byte_0,
+                    x,
                     self.registers.f,
                     false,
                 );
-                let full_carry = subtraction_produces_u8_full_carry(self.registers.a, byte_0);
+                let full_carry = subtraction_produces_u8_full_carry(self.registers.a, x);
 
-                let sub_result = self.registers.a.wrapping_sub(byte_0);
+                let sub_result = self.registers.a.wrapping_sub(x);
 
                 CpuDiff::new(2, 8)
                     .flag_z(sub_result == 0)
