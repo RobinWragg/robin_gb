@@ -1003,13 +1003,9 @@ impl Cpu {
             0xfe => {
                 let imm = immediate_u8();
 
-                let half_carry = subtraction_produces_u8_half_carry(
-                    self.registers.a,
-                    imm,
-                    self.registers.f,
-                    false,
-                );
-                let full_carry = subtraction_produces_u8_full_carry(self.registers.a, imm);
+                let half_carry =
+                    subtraction_produces_half_carry(self.registers.a, imm, self.registers.f, false);
+                let full_carry = subtraction_produces_full_carry(self.registers.a, imm);
 
                 let sub_result = self.registers.a.wrapping_sub(imm);
 

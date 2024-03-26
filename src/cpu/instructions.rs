@@ -52,20 +52,15 @@ impl CpuDiff {
 }
 
 // rwtodo: Maybe these checks should return a FlagDiff.
-pub fn subtraction_produces_u8_full_carry(a: u8, b: u8) -> bool {
+pub fn subtraction_produces_full_carry(a: u8, b: u8) -> bool {
     i16::from(a) - i16::from(b) < 0
 }
 
-pub fn addition_produces_u8_full_carry(a: u8, b: u8) -> bool {
+pub fn addition_produces_full_carry(a: u8, b: u8) -> bool {
     i16::from(a) + i16::from(b) > 0xff
 }
 
-pub fn subtraction_produces_u8_half_carry(
-    a: u8,
-    b: u8,
-    register_f: u8,
-    include_carry: bool,
-) -> bool {
+pub fn subtraction_produces_half_carry(a: u8, b: u8, register_f: u8, include_carry: bool) -> bool {
     let optional_carry: i16 = if include_carry && (register_f & Registers::FLAG_CARRY) != 0 {
         1
     } else {
@@ -75,7 +70,7 @@ pub fn subtraction_produces_u8_half_carry(
     i16::from(a & 0x0f) - i16::from(b & 0x0f) - optional_carry < 0
 }
 
-pub fn addition_produces_u8_half_carry(a: u8, b: u8, register_f: u8, include_carry: bool) -> bool {
+pub fn addition_produces_half_carry(a: u8, b: u8, register_f: u8, include_carry: bool) -> bool {
     let optional_carry: i16 = if include_carry && (register_f & Registers::FLAG_CARRY) != 0 {
         1
     } else {
@@ -155,7 +150,7 @@ pub fn print_instruction(pc: u16, memory: &mut Memory) {
 }
 
 pub fn inc_u8(value_to_increment: &mut u8, register_f: u8, cycles: u8) -> CpuDiff {
-    let half_carry = addition_produces_u8_half_carry(*value_to_increment, 1, register_f, false);
+    let half_carry = addition_produces_half_carry(*value_to_increment, 1, register_f, false);
     *value_to_increment = value_to_increment.wrapping_add(1);
 
     CpuDiff::new(1, cycles)
@@ -211,7 +206,7 @@ pub fn nop() -> CpuDiff {
 }
 
 pub fn dec_u8(value_to_dec: &mut u8, register_f: u8, cycles: u8) -> CpuDiff {
-    let half_carry = subtraction_produces_u8_half_carry(*value_to_dec, 1, register_f, false);
+    let half_carry = subtraction_produces_half_carry(*value_to_dec, 1, register_f, false);
 
     *value_to_dec = value_to_dec.wrapping_sub(1);
 
@@ -247,8 +242,8 @@ pub fn call(condition: bool, registers: &mut Registers, memory: &mut Memory) -> 
 
 // rwtodo: Can I reuse this for INC? and SUB for DEC?
 pub fn add_u8(add_src: u8, registers: &mut Registers, pc_delta: i16, cycles: u8) -> CpuDiff {
-    let half_carry = addition_produces_u8_half_carry(registers.a, add_src, registers.f, false);
-    let full_carry = addition_produces_u8_full_carry(registers.a, add_src);
+    let half_carry = addition_produces_half_carry(registers.a, add_src, registers.f, false);
+    let full_carry = addition_produces_full_carry(registers.a, add_src);
 
     registers.a = registers.a.wrapping_add(add_src);
 
@@ -266,8 +261,8 @@ pub fn adc(add_src: u8, registers: &mut Registers, pc_delta: i16, cycles: u8) ->
         0
     };
 
-    let half_carry_flag = addition_produces_u8_half_carry(registers.a, add_src, registers.f, true);
-    let full_carry_flag = addition_produces_u8_full_carry(registers.a, add_src + carry_value);
+    let half_carry_flag = addition_produces_half_carry(registers.a, add_src, registers.f, true);
+    let full_carry_flag = addition_produces_full_carry(registers.a, add_src + carry_value);
 
     registers.a += add_src + carry_value;
 
@@ -279,8 +274,8 @@ pub fn adc(add_src: u8, registers: &mut Registers, pc_delta: i16, cycles: u8) ->
 }
 
 pub fn sub(sub_src: u8, registers: &mut Registers, pc_delta: i16, cycles: u8) -> CpuDiff {
-    let half_carry = subtraction_produces_u8_half_carry(registers.a, sub_src, registers.f, false);
-    let full_carry = subtraction_produces_u8_full_carry(registers.a, sub_src);
+    let half_carry = subtraction_produces_half_carry(registers.a, sub_src, registers.f, false);
+    let full_carry = subtraction_produces_full_carry(registers.a, sub_src);
 
     registers.a -= sub_src;
 
@@ -298,8 +293,8 @@ pub fn sbc(sub_src: u8, registers: &mut Registers, pc_delta: i16, cycles: u8) ->
         0
     };
 
-    let half_carry = subtraction_produces_u8_half_carry(registers.a, sub_src, registers.f, true);
-    let full_carry = subtraction_produces_u8_full_carry(registers.a, sub_src + carry);
+    let half_carry = subtraction_produces_half_carry(registers.a, sub_src, registers.f, true);
+    let full_carry = subtraction_produces_full_carry(registers.a, sub_src + carry);
 
     registers.a -= sub_src + carry;
 
@@ -312,9 +307,8 @@ pub fn sbc(sub_src: u8, registers: &mut Registers, pc_delta: i16, cycles: u8) ->
 
 // rwtodo: I think this always increments pc by 1, so that param can be removed.
 pub fn cp(comparator: u8, registers: &Registers, pc_delta: i16, cycles: u8) -> CpuDiff {
-    let half_carry =
-        subtraction_produces_u8_half_carry(registers.a, comparator, registers.f, false);
-    let full_carry = subtraction_produces_u8_full_carry(registers.a, comparator);
+    let half_carry = subtraction_produces_half_carry(registers.a, comparator, registers.f, false);
+    let full_carry = subtraction_produces_full_carry(registers.a, comparator);
 
     let sub_result: u8 = registers.a - comparator;
 
