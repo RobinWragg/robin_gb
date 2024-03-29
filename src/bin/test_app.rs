@@ -15,21 +15,22 @@ const WINDOW_WIDTH: u32 = 160 * 4;
 const WINDOW_HEIGHT: u32 = 144 * 4;
 
 async fn wgpu_init(window: &Window) -> (wgpu::Surface, wgpu::Device, wgpu::Queue) {
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-        backends: wgpu::Backends::all(),
-        ..Default::default()
-    });
-
-    let surface = instance.create_surface(window).unwrap();
-
-    let adapter = instance
-        .request_adapter(&wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::default(),
-            compatible_surface: Some(&surface),
-            force_fallback_adapter: false,
-        })
-        .await
-        .unwrap();
+    let (surface, adapter) = {
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::all(),
+            ..Default::default()
+        });
+        let surface = instance.create_surface(window).unwrap();
+        let adapter = instance
+            .request_adapter(&wgpu::RequestAdapterOptions {
+                power_preference: wgpu::PowerPreference::HighPerformance,
+                compatible_surface: Some(&surface),
+                force_fallback_adapter: false,
+            })
+            .await
+            .unwrap();
+        (surface, adapter)
+    };
 
     let (device, queue) = adapter
         .request_device(
@@ -43,48 +44,34 @@ async fn wgpu_init(window: &Window) -> (wgpu::Surface, wgpu::Device, wgpu::Queue
         .await
         .unwrap();
 
-    // rwtodo: wgpu::Surface::get_default_config?
-    let surface_caps = surface.get_capabilities(&adapter);
-    // rwtodo this chaining is kinda smelly.
-    let surface_format = surface_caps
-        .formats
-        .iter()
-        .copied()
-        .filter(|f| f.is_srgb())
-        .next()
-        .unwrap_or(surface_caps.formats[0]);
-    let config = wgpu::SurfaceConfiguration {
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-        format: surface_format,
-        width: WINDOW_WIDTH,
-        height: WINDOW_HEIGHT,
-        present_mode: wgpu::PresentMode::Fifo,
-        alpha_mode: surface_caps.alpha_modes[0],
-        view_formats: vec![],
-        desired_maximum_frame_latency: 1,
-    };
-    surface.configure(&device, &config);
+    surface.configure(
+        &device,
+        &surface
+            .get_default_config(&adapter, WINDOW_WIDTH, WINDOW_HEIGHT)
+            .unwrap(),
+    );
 
     (surface, device, queue)
 }
 
 fn render(surface: &wgpu::Surface, device: &wgpu::Device, queue: &wgpu::Queue) {
     let output = surface.get_current_texture().unwrap();
-    let view = output
-        .texture
-        .create_view(&wgpu::TextureViewDescriptor::default());
 
-    let mut encoder =
-        device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-
-    {
+    let encoder = {
         let clear_color = wgpu::Color {
             r: 0.2,
-            g: 1.0,
+            g: 0.3,
             b: 0.1,
             a: 1.0,
         };
-        encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+
+        let view = output
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+
+        let mut encoder =
+            device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+        let _ = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: None,
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view: &view,
@@ -98,7 +85,8 @@ fn render(surface: &wgpu::Surface, device: &wgpu::Device, queue: &wgpu::Queue) {
             occlusion_query_set: None,
             timestamp_writes: None,
         });
-    }
+        encoder
+    };
 
     queue.submit(std::iter::once(encoder.finish()));
     output.present();
