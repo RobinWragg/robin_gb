@@ -105,8 +105,8 @@ fn render(surface: &wgpu::Surface, device: &wgpu::Device, queue: &wgpu::Queue) {
 }
 
 fn main() {
-    let rom_file_data = fs::read("roms/Tetris.gb").unwrap();
-    let mut gb = robin_gb::GameBoy::new(&rom_file_data[..]);
+    let roms = [fs::read("roms/Tetris.gb").unwrap()];
+    let mut game_boys = roms.map(|rom| robin_gb::GameBoy::new(&rom));
 
     let event_loop = EventLoop::new().unwrap();
     event_loop.set_control_flow(ControlFlow::Poll);
@@ -129,7 +129,7 @@ fn main() {
             elwt.exit();
         }
         Event::AboutToWait => {
-            let _ = gb.emulate_next_frame();
+            let game_boy_screens = game_boys.iter_mut().map(|gb| gb.emulate_next_frame());
             render(&surface, &device, &queue);
         }
         _ => (),
