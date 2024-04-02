@@ -44,12 +44,20 @@ async fn wgpu_init(window: &Window) -> (wgpu::Surface, wgpu::Device, wgpu::Queue
         .await
         .unwrap();
 
-    surface.configure(
-        &device,
-        &surface
-            .get_default_config(&adapter, WINDOW_WIDTH, WINDOW_HEIGHT)
-            .unwrap(),
-    );
+    let config = surface
+        .get_default_config(&adapter, WINDOW_WIDTH, WINDOW_HEIGHT)
+        .unwrap();
+    {
+        let shader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
+        let render_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: None,
+                bind_group_layouts: &[],
+                push_constant_ranges: &[],
+            });
+    }
+
+    surface.configure(&device, &config);
 
     (surface, device, queue)
 }
