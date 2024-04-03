@@ -14,7 +14,60 @@ use winit::window::{Window, WindowBuilder};
 const WINDOW_WIDTH: u32 = 160 * 4;
 const WINDOW_HEIGHT: u32 = 144 * 4;
 
-async fn wgpu_init(window: &Window) -> (wgpu::Surface, wgpu::Device, wgpu::Queue) {
+fn create_pipeline(
+    device: &wgpu::Device,
+    config: &wgpu::SurfaceConfiguration,
+) -> wgpu::RenderPipeline {
+    let shader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
+    let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: None,
+        bind_group_layouts: &[],
+        push_constant_ranges: &[],
+    });
+    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("Render Pipeline"),
+        layout: Some(&render_pipeline_layout),
+        vertex: wgpu::VertexState {
+            module: &shader,
+            entry_point: "vs_main",
+            buffers: &[],
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &shader,
+            entry_point: "fs_main",
+            targets: &[Some(wgpu::ColorTargetState {
+                format: config.format,
+                blend: Some(wgpu::BlendState::REPLACE),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+        }),
+        primitive: wgpu::PrimitiveState {
+            topology: wgpu::PrimitiveTopology::TriangleList,
+            strip_index_format: None,
+            front_face: wgpu::FrontFace::Ccw,
+            cull_mode: Some(wgpu::Face::Back),
+            polygon_mode: wgpu::PolygonMode::Fill,
+            unclipped_depth: false,
+            conservative: false,
+        },
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState {
+            count: 1,
+            mask: !0,
+            alpha_to_coverage_enabled: false,
+        },
+        multiview: None, // 5.
+    })
+}
+
+async fn wgpu_init(
+    window: &Window,
+) -> (
+    wgpu::Surface,
+    wgpu::Device,
+    wgpu::Queue,
+    wgpu::RenderPipeline,
+) {
     let (surface, adapter) = {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::all(),
@@ -47,39 +100,37 @@ async fn wgpu_init(window: &Window) -> (wgpu::Surface, wgpu::Device, wgpu::Queue
     let config = surface
         .get_default_config(&adapter, WINDOW_WIDTH, WINDOW_HEIGHT)
         .unwrap();
-    {
-        let shader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
-        let render_pipeline_layout =
-            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: None,
-                bind_group_layouts: &[],
-                push_constant_ranges: &[],
-            });
-    }
+
+    let pipeline = create_pipeline(&device, &config);
 
     surface.configure(&device, &config);
 
-    (surface, device, queue)
+    (surface, device, queue, pipeline)
 }
 
-fn render(surface: &wgpu::Surface, device: &wgpu::Device, queue: &wgpu::Queue) {
+fn render(
+    surface: &wgpu::Surface,
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    pipeline: &wgpu::RenderPipeline,
+) {
     let output = surface.get_current_texture().unwrap();
 
-    let encoder = {
-        let clear_color = wgpu::Color {
-            r: 0.2,
-            g: 0.3,
-            b: 0.1,
-            a: 1.0,
-        };
+    let clear_color = wgpu::Color {
+        r: 0.2,
+        g: 0.3,
+        b: 0.1,
+        a: 1.0,
+    };
 
-        let view = output
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
+    let view = output
+        .texture
+        .create_view(&wgpu::TextureViewDescriptor::default());
 
-        let mut encoder =
-            device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-        let _ = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+    let mut encoder =
+        device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+    {
+        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: None,
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view: &view,
@@ -93,8 +144,10 @@ fn render(surface: &wgpu::Surface, device: &wgpu::Device, queue: &wgpu::Queue) {
             occlusion_query_set: None,
             timestamp_writes: None,
         });
-        encoder
-    };
+
+        render_pass.set_pipeline(&pipeline);
+        render_pass.draw(0..3, 0..1);
+    } // We're dropping render_pass here to unborrow encoder.
 
     queue.submit(std::iter::once(encoder.finish()));
     output.present();
@@ -114,7 +167,7 @@ fn main() {
         .build(&event_loop)
         .unwrap();
 
-    let (surface, device, queue) = block_on(wgpu_init(&window));
+    let (surface, device, queue, pipeline) = block_on(wgpu_init(&window));
 
     let _ = event_loop.run(move |event, elwt| match event {
         Event::WindowEvent {
@@ -126,7 +179,7 @@ fn main() {
         }
         Event::AboutToWait => {
             let game_boy_screens = game_boys.iter_mut().map(|gb| gb.emulate_next_frame());
-            render(&surface, &device, &queue);
+            render(&surface, &device, &queue, &pipeline);
         }
         _ => (),
     });
