@@ -42,7 +42,7 @@ fn create_pipeline(
             })],
         }),
         primitive: wgpu::PrimitiveState {
-            topology: wgpu::PrimitiveTopology::TriangleList,
+            topology: wgpu::PrimitiveTopology::TriangleStrip,
             strip_index_format: None,
             front_face: wgpu::FrontFace::Ccw,
             cull_mode: Some(wgpu::Face::Back),
@@ -146,7 +146,7 @@ fn render(
         });
 
         render_pass.set_pipeline(&pipeline);
-        render_pass.draw(0..3, 0..1);
+        render_pass.draw(0..4, 0..1);
     } // We're dropping render_pass here to unborrow encoder.
 
     queue.submit(std::iter::once(encoder.finish()));
