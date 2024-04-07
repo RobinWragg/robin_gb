@@ -400,7 +400,6 @@ impl Renderer {
         }
 
         // Convert from game boy 2-bit (with SHADE_0_FLAG) to target 8-bit.
-        /*
         for pixel in &mut screen_line {
             // The '& 0x03' below is to discard the SHADE_0_FLAG bit, which has already served its purpose in render_objects(). rwtodo move this to render_objects()?
             let mut pixel_i16 = i16::from(*pixel & 0x03);
@@ -411,7 +410,6 @@ impl Renderer {
 
             *pixel = pixel_i16 as u8;
         }
-        */
 
         screen_line
     }

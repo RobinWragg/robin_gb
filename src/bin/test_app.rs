@@ -14,14 +14,21 @@ use winit::window::{Window, WindowBuilder};
 const WINDOW_WIDTH: u32 = 160 * 4;
 const WINDOW_HEIGHT: u32 = 144 * 4;
 
+const TEXTURE_SIZE: wgpu::Extent3d = wgpu::Extent3d {
+    width: 160,  // rwtodo: constants
+    height: 144, // rwtodo: constants
+    depth_or_array_layers: 1,
+};
+
 fn create_pipeline(
     device: &wgpu::Device,
     config: &wgpu::SurfaceConfiguration,
+    bind_group_layout: &wgpu::BindGroupLayout,
 ) -> wgpu::RenderPipeline {
     let shader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
     let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: None,
-        bind_group_layouts: &[],
+        bind_group_layouts: &[bind_group_layout],
         push_constant_ranges: &[],
     });
     device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -67,6 +74,8 @@ async fn wgpu_init(
     wgpu::Device,
     wgpu::Queue,
     wgpu::RenderPipeline,
+    wgpu::Texture,
+    wgpu::BindGroup,
 ) {
     let (surface, adapter) = {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
@@ -101,11 +110,71 @@ async fn wgpu_init(
         .get_default_config(&adapter, WINDOW_WIDTH, WINDOW_HEIGHT)
         .unwrap();
 
-    let pipeline = create_pipeline(&device, &config);
-
     surface.configure(&device, &config);
 
-    (surface, device, queue, pipeline)
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        size: TEXTURE_SIZE,
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::R8Unorm, // One byte per pixel
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        label: None,
+        view_formats: &[],
+    });
+
+    let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+    let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+        // rwtodo: what are the defaults?
+        address_mode_u: wgpu::AddressMode::ClampToEdge,
+        address_mode_v: wgpu::AddressMode::ClampToEdge,
+        address_mode_w: wgpu::AddressMode::ClampToEdge,
+        mag_filter: wgpu::FilterMode::Linear,
+        min_filter: wgpu::FilterMode::Nearest,
+        mipmap_filter: wgpu::FilterMode::Nearest,
+        ..Default::default()
+    });
+    let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    multisampled: false,
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                // This should match the filterable field of the
+                // corresponding Texture entry above.
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                count: None,
+            },
+        ],
+        label: Some("texture_bind_group_layout"),
+    });
+    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        layout: &bind_group_layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(&texture_view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::Sampler(&sampler),
+            },
+        ],
+        label: None,
+    });
+
+    let pipeline = create_pipeline(&device, &config, &bind_group_layout);
+
+    (surface, device, queue, pipeline, texture, bind_group)
 }
 
 fn render(
@@ -113,8 +182,26 @@ fn render(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     pipeline: &wgpu::RenderPipeline,
+    texture: &wgpu::Texture,
+    bind_group: &wgpu::BindGroup,
     game_boy_screen: &Vec<u8>, // rwtodo: I think I can pass around a fixed-size array, but I would have to keep moving it.
 ) {
+    queue.write_texture(
+        wgpu::ImageCopyTexture {
+            texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        game_boy_screen,
+        wgpu::ImageDataLayout {
+            offset: 0,
+            bytes_per_row: Some(160),  // rwtodo: constant
+            rows_per_image: Some(144), // rwtodo: constant
+        },
+        TEXTURE_SIZE,
+    );
+
     let output = surface.get_current_texture().unwrap();
 
     let clear_color = wgpu::Color {
@@ -147,6 +234,7 @@ fn render(
         });
 
         render_pass.set_pipeline(&pipeline);
+        render_pass.set_bind_group(0, &bind_group, &[]);
         render_pass.draw(0..4, 0..1);
     } // We're dropping render_pass here to unborrow encoder.
 
@@ -168,7 +256,7 @@ fn main() {
         .build(&event_loop)
         .unwrap();
 
-    let (surface, device, queue, pipeline) = block_on(wgpu_init(&window));
+    let (surface, device, queue, pipeline, texture, bind_group) = block_on(wgpu_init(&window));
 
     let _ = event_loop.run(move |event, elwt| match event {
         Event::WindowEvent {
@@ -180,7 +268,15 @@ fn main() {
         }
         Event::AboutToWait => {
             let screen = game_boys[0].emulate_next_frame(); // Just emulate one game boy for now.
-            render(&surface, &device, &queue, &pipeline, &screen);
+            render(
+                &surface,
+                &device,
+                &queue,
+                &pipeline,
+                &texture,
+                &bind_group,
+                &screen,
+            );
         }
         _ => (),
     });

@@ -17,7 +17,12 @@ fn vs_main(
 
 // Fragment shader
 
+@group(0) @binding(0)
+var t_0: texture_2d<f32>;
+@group(0) @binding(1)
+var s_0: sampler;
+
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    return vec4<f32>(0.9, 0.2, in.clip_position.x * 0.002, 1.0);
+    return textureSample(t_0, s_0, in.clip_position.xy * 0.002);
 }
