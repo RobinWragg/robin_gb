@@ -113,6 +113,7 @@ fn render(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     pipeline: &wgpu::RenderPipeline,
+    game_boy_screen: &Vec<u8>, // rwtodo: I think I can pass around a fixed-size array, but I would have to keep moving it.
 ) {
     let output = surface.get_current_texture().unwrap();
 
@@ -178,8 +179,8 @@ fn main() {
             elwt.exit();
         }
         Event::AboutToWait => {
-            let game_boy_screens = game_boys.iter_mut().map(|gb| gb.emulate_next_frame());
-            render(&surface, &device, &queue, &pipeline);
+            let screen = game_boys[0].emulate_next_frame(); // Just emulate one game boy for now.
+            render(&surface, &device, &queue, &pipeline, &screen);
         }
         _ => (),
     });

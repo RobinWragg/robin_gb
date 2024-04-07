@@ -179,7 +179,7 @@ impl GameBoy {
         previous_lcd_ly < 144
     }
 
-    pub fn emulate_next_frame(&mut self) -> &[u8; Lcd::PIXEL_COUNT] {
+    pub fn emulate_next_frame(&mut self) -> Vec<u8> {
         // Call the function until the vblank phase is exited.
         while self.emulate_next_line_of_frame() == false {}
 

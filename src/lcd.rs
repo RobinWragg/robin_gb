@@ -25,7 +25,7 @@ This signal is set to 1 if:
 pub struct Lcd {
     renderer: Renderer,
     elapsed_cycles: u32, // rwtodo if this needs to be i32, fine.
-    pixels: [u8; Lcd::PIXEL_COUNT],
+    pixels: Vec<u8>,
 }
 
 impl Lcd {
@@ -38,7 +38,7 @@ impl Lcd {
             // rwtodo: Not sure what the shades should initialize to.
             renderer: render::Renderer::new(),
             elapsed_cycles: 0,
-            pixels: [42; Lcd::PIXEL_COUNT], // rwtodo: what the right initial pixel value?
+            pixels: vec![0x00; Lcd::PIXEL_COUNT], // rwtodo: what the right initial pixel value?
         }
     }
 
@@ -118,6 +118,7 @@ impl Lcd {
                     let ly = usize::from(*memory.direct_access(address::LCD_LY));
 
                     // rwtodo: do a memcpy equivalent instead of iterating.
+                    debug_assert_eq!(self.pixels.len(), Lcd::PIXEL_COUNT);
                     for x in 0..Lcd::WIDTH {
                         self.pixels[ly * Lcd::WIDTH + x] = screen_line[x];
                     }
@@ -143,7 +144,7 @@ impl Lcd {
         }
     }
 
-    pub fn pixels(&self) -> &[u8; Lcd::PIXEL_COUNT] {
-        &self.pixels
+    pub fn pixels(&mut self) -> Vec<u8> {
+        self.pixels.clone()
     }
 }
