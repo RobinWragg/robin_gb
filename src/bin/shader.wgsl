@@ -9,8 +9,8 @@ fn vs_main(
     @builtin(vertex_index) in_vertex_index: u32,
 ) -> VertexOutput {
     var out: VertexOutput;
-    let x = f32(1 - i32(in_vertex_index)) * 0.5;
-    let y = f32(i32(in_vertex_index & 1u) * 2 - 1) * 0.5;
+    var x = f32(in_vertex_index % 2) * 2.0 - 1.0;
+    var y = f32(in_vertex_index / 2) * 2.0 - 1.0;
     out.clip_position = vec4<f32>(x, y, 0.0, 1.0);
     return out;
 }
@@ -24,5 +24,10 @@ var s_0: sampler;
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    return textureSample(t_0, s_0, in.clip_position.xy * 0.002);
+    // convert normalized device coordinates to pixel coordinates.
+    // rwtodo: Define these constants as uniforms or similar.
+    let x = in.clip_position.x / 640.0;
+    let y = in.clip_position.y / 576.0;
+    let color = textureSample(t_0, s_0, vec2(x, y)).r;
+    return vec4<f32>(color, color, color, 1.0);
 }

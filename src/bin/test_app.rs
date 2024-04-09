@@ -129,7 +129,7 @@ async fn wgpu_init(
         address_mode_u: wgpu::AddressMode::ClampToEdge,
         address_mode_v: wgpu::AddressMode::ClampToEdge,
         address_mode_w: wgpu::AddressMode::ClampToEdge,
-        mag_filter: wgpu::FilterMode::Linear,
+        mag_filter: wgpu::FilterMode::Nearest,
         min_filter: wgpu::FilterMode::Nearest,
         mipmap_filter: wgpu::FilterMode::Nearest,
         ..Default::default()
@@ -236,7 +236,7 @@ fn render(
         render_pass.set_pipeline(&pipeline);
         render_pass.set_bind_group(0, &bind_group, &[]);
         render_pass.draw(0..4, 0..1);
-    } // We're dropping render_pass here to unborrow encoder.
+    } // We're dropping render_pass here to unborrow the encoder.
 
     queue.submit(std::iter::once(encoder.finish()));
     output.present();
