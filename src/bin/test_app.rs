@@ -1,6 +1,7 @@
 use futures::executor::block_on;
 use robin_gb;
 use std::fs;
+use std::sync::Arc;
 use wgpu;
 use winit::dpi::PhysicalSize;
 use winit::event::{Event, WindowEvent};
@@ -10,6 +11,32 @@ use winit::window::{Window, WindowBuilder};
 // rwtodo: This will become a simple app that loads multiple instances of the emulator and loads a different game in each one.
 
 // rwtodo: Put this and winit/wgpu behind a feature, as I don't want users of the robin_gb library to have to download them.
+
+struct GpuState<'a> {
+    surface: wgpu::Surface<'a>,
+}
+
+impl GpuState<'static> {
+    async fn new(window: &Arc<Window>) -> GpuState<'static> {
+        let (surface, adapter) = {
+            let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+                backends: wgpu::Backends::all(),
+                ..Default::default()
+            });
+            let surface = instance.create_surface(window.clone()).unwrap();
+            let adapter = instance
+                .request_adapter(&wgpu::RequestAdapterOptions {
+                    power_preference: wgpu::PowerPreference::HighPerformance,
+                    compatible_surface: Some(&surface),
+                    force_fallback_adapter: false,
+                })
+                .await
+                .unwrap();
+            (surface, adapter)
+        };
+        Self { surface }
+    }
+}
 
 const WINDOW_WIDTH: u32 = 160 * 4;
 const WINDOW_HEIGHT: u32 = 144 * 4;
@@ -250,11 +277,14 @@ fn main() {
     event_loop.set_control_flow(ControlFlow::Poll);
 
     let size = PhysicalSize::new(WINDOW_WIDTH, WINDOW_HEIGHT);
-    let window = WindowBuilder::new()
+    let window: Arc<Window> = WindowBuilder::new()
         .with_title("robin_gb")
         .with_inner_size(size)
         .build(&event_loop)
-        .unwrap();
+        .unwrap()
+        .into();
+
+    let state = GpuState::new(&window);
 
     let (surface, device, queue, pipeline, texture, bind_group) = block_on(wgpu_init(&window));
 
