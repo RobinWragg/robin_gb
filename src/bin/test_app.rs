@@ -16,8 +16,8 @@ struct GpuState<'a> {
     surface: wgpu::Surface<'a>,
 }
 
-impl GpuState<'static> {
-    async fn new(window: &Arc<Window>) -> GpuState<'static> {
+impl<'a> GpuState<'a> {
+    async fn new(window: &Arc<Window>) -> GpuState<'a> {
         let (surface, adapter) = {
             let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
                 backends: wgpu::Backends::all(),
