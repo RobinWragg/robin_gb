@@ -1,8 +1,10 @@
+use bytemuck;
 use futures::executor::block_on;
 use robin_gb;
 use std::fs;
 use std::sync::Arc;
 use wgpu;
+use wgpu::util::DeviceExt; // rwtodo: remove this when updating the uniform buffer per frame.
 use winit::dpi::PhysicalSize;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
@@ -136,10 +138,32 @@ impl<'a> GpuState<'a> {
             mipmap_filter: wgpu::FilterMode::Nearest,
             ..Default::default()
         });
+
+        let float_buffer = {
+            let f: f32 = 0.0;
+            let f_bytes = bytemuck::bytes_of(&f);
+
+            let d = wgpu::util::BufferInitDescriptor {
+                label: None,
+                contents: f_bytes,
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            };
+            device.create_buffer_init(&d)
+        };
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             entries: &[
                 wgpu::BindGroupLayoutEntry {
                     binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
                     visibility: wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Texture {
                         multisampled: false,
@@ -149,7 +173,7 @@ impl<'a> GpuState<'a> {
                     count: None,
                 },
                 wgpu::BindGroupLayoutEntry {
-                    binding: 1,
+                    binding: 2,
                     visibility: wgpu::ShaderStages::FRAGMENT,
                     // This should match the filterable field of the
                     // corresponding Texture entry above.
@@ -164,10 +188,14 @@ impl<'a> GpuState<'a> {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&texture_view),
+                    resource: float_buffer.as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&texture_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
                     resource: wgpu::BindingResource::Sampler(&sampler),
                 },
             ],

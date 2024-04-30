@@ -5,6 +5,9 @@ struct VertToFrag {
     @location(0) tex_coord: vec2<f32>,
 };
 
+@group(0) @binding(0)
+var<uniform> float_todo: f32;
+
 @vertex
 fn vs_main(
     @builtin(vertex_index) vert_index: u32,
@@ -13,16 +16,16 @@ fn vs_main(
     let y = f32(vert_index / 2);
 
     var out: VertToFrag;
-    out.position = vec4<f32>(x * 2.0 - 1.0, y * 2.0 - 1.0, 0.0, 1.0);
+    out.position = vec4<f32>(x * 2.0 - 1.0 + float_todo, y * 2.0 - 1.0, 0.0, 1.0);
     out.tex_coord = vec2<f32>(x, 1.0 - y);
     return out;
 }
 
 // Fragment shader
 
-@group(0) @binding(0)
-var t_0: texture_2d<f32>;
 @group(0) @binding(1)
+var t_0: texture_2d<f32>;
+@group(0) @binding(2)
 var s_0: sampler;
 
 @fragment
