@@ -16,7 +16,7 @@ fn vs_main(
     let y = f32(vert_index / 2);
 
     var out: VertToFrag;
-    out.position = vec4<f32>(x * 2.0 - 1.0, y * 2.0 - 1.0, 0.0, 1.0) * matrix;
+    out.position = vec4<f32>(x, y, 0.0, 1.0) * matrix;
     out.tex_coord = vec2<f32>(x, 1.0 - y);
     return out;
 }

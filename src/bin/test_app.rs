@@ -215,8 +215,22 @@ impl<'a> GpuState<'a> {
         }
     }
 
+    #[must_use]
+    fn begin_render(&self) -> wgpu::SurfaceTexture {
+        self.surface.get_current_texture().unwrap()
+    }
+
+    fn finish_render(&self, surface_texture: wgpu::SurfaceTexture) {
+        surface_texture.present();
+    }
+
     // rwtodo: I think I can pass around a fixed-size array, but I would have to keep moving it.
-    fn render_gb_screen(&self, game_boy_screen: &Vec<u8>, matrix: Mat4) {
+    fn render_gb_screen(
+        &self,
+        surface_texture: &wgpu::SurfaceTexture,
+        game_boy_screen: &Vec<u8>,
+        matrix: Mat4,
+    ) {
         self.queue.write_texture(
             wgpu::ImageCopyTexture {
                 texture: &self.texture,
@@ -238,20 +252,11 @@ impl<'a> GpuState<'a> {
         self.queue
             .write_buffer(&self.matrix_buffer, 0, matrix_bytes);
 
-        let output = self.surface.get_current_texture().unwrap();
-
-        let clear_color = wgpu::Color {
-            r: 0.2,
-            g: 0.3,
-            b: 0.1,
-            a: 1.0,
-        };
-
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
         {
-            let view = output
+            let view = surface_texture
                 .texture
                 .create_view(&wgpu::TextureViewDescriptor::default());
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -260,7 +265,7 @@ impl<'a> GpuState<'a> {
                     view: &view,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(clear_color),
+                        load: wgpu::LoadOp::Load,
                         store: wgpu::StoreOp::Store,
                     },
                 })],
@@ -275,7 +280,6 @@ impl<'a> GpuState<'a> {
         } // We're dropping render_pass here to unborrow the encoder.
 
         self.queue.submit(std::iter::once(encoder.finish()));
-        output.present();
     }
 }
 
@@ -296,6 +300,15 @@ fn main() {
 
     let state = block_on(GpuState::new(&window));
 
+    let fullscreen_transform = {
+        let mut m = Mat4::IDENTITY;
+        m.x_axis.x = 2.0;
+        m.y_axis.y = 2.0;
+        m.x_axis.w = -1.0;
+        m.y_axis.w = -1.0;
+        m
+    };
+
     let _ = event_loop.run(move |event, elwt| match event {
         Event::WindowEvent {
             event: WindowEvent::CloseRequested,
@@ -306,8 +319,10 @@ fn main() {
         }
         Event::AboutToWait => {
             let screen = game_boys[0].emulate_next_frame(); // Just emulate one game boy for now.
-            let matrix = Mat4::IDENTITY;
-            state.render_gb_screen(&screen, matrix);
+
+            let surface_texture = state.begin_render();
+            state.render_gb_screen(&surface_texture, &screen, fullscreen_transform);
+            state.finish_render(surface_texture);
         }
         _ => (),
     });
