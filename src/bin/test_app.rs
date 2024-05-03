@@ -1,10 +1,10 @@
 use bytemuck;
 use futures::executor::block_on;
+use glam::f32::Mat4;
 use robin_gb;
 use std::fs;
 use std::sync::Arc;
 use wgpu;
-use wgpu::util::DeviceExt; // rwtodo: remove this when updating the uniform buffer per frame.
 use winit::dpi::PhysicalSize;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
@@ -77,6 +77,7 @@ struct GpuState<'a> {
     pipeline: wgpu::RenderPipeline,
     texture: wgpu::Texture,
     bind_group: wgpu::BindGroup,
+    matrix_buffer: wgpu::Buffer,
 }
 
 impl<'a> GpuState<'a> {
@@ -139,16 +140,15 @@ impl<'a> GpuState<'a> {
             ..Default::default()
         });
 
-        let float_buffer = {
-            let f: f32 = 0.0;
-            let f_bytes = bytemuck::bytes_of(&f);
-
-            let d = wgpu::util::BufferInitDescriptor {
+        let matrix_buffer = {
+            let desc = wgpu::BufferDescriptor {
                 label: None,
-                contents: f_bytes,
                 usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                size: std::mem::size_of::<Mat4>() as u64,
+                mapped_at_creation: false,
             };
-            device.create_buffer_init(&d)
+            // device.create_buffer_init(&d)
+            device.create_buffer(&desc)
         };
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             entries: &[
@@ -188,7 +188,7 @@ impl<'a> GpuState<'a> {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: float_buffer.as_entire_binding(),
+                    resource: matrix_buffer.as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
@@ -211,11 +211,12 @@ impl<'a> GpuState<'a> {
             pipeline,
             texture,
             bind_group,
+            matrix_buffer,
         }
     }
 
     // rwtodo: I think I can pass around a fixed-size array, but I would have to keep moving it.
-    fn render_gb_screen(&self, game_boy_screen: &Vec<u8>) {
+    fn render_gb_screen(&self, game_boy_screen: &Vec<u8>, matrix: Mat4) {
         self.queue.write_texture(
             wgpu::ImageCopyTexture {
                 texture: &self.texture,
@@ -232,6 +233,11 @@ impl<'a> GpuState<'a> {
             TEXTURE_SIZE,
         );
 
+        let matrix_floats = matrix.to_cols_array();
+        let matrix_bytes = bytemuck::bytes_of(&matrix_floats);
+        self.queue
+            .write_buffer(&self.matrix_buffer, 0, matrix_bytes);
+
         let output = self.surface.get_current_texture().unwrap();
 
         let clear_color = wgpu::Color {
@@ -241,14 +247,13 @@ impl<'a> GpuState<'a> {
             a: 1.0,
         };
 
-        let view = output
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
-
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
         {
+            let view = output
+                .texture
+                .create_view(&wgpu::TextureViewDescriptor::default());
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: None,
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -301,7 +306,8 @@ fn main() {
         }
         Event::AboutToWait => {
             let screen = game_boys[0].emulate_next_frame(); // Just emulate one game boy for now.
-            state.render_gb_screen(&screen);
+            let matrix = Mat4::IDENTITY;
+            state.render_gb_screen(&screen, matrix);
         }
         _ => (),
     });
