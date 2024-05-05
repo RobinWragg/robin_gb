@@ -106,8 +106,6 @@ impl Banker {
             }
         }
 
-        println!("Cart has a total of {} ROM banks", total_bank_count);
-
         if total_bank_count > 2 {
             let cached_bank_count = total_bank_count - 2;
 
