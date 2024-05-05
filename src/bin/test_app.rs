@@ -8,10 +8,12 @@ use robin_gb::GameBoy;
 use std::fs;
 use std::sync::Arc;
 use wgpu;
-use winit::dpi::PhysicalSize;
-use winit::event::{Event, WindowEvent};
-use winit::event_loop::{ControlFlow, EventLoop};
-use winit::window::{Window, WindowBuilder};
+use winit::{
+    dpi::PhysicalSize,
+    event::{Event, WindowEvent},
+    event_loop::{ControlFlow, EventLoop},
+    window::{Window, WindowBuilder},
+};
 
 // rwtodo: Put this and winit/wgpu behind a feature, as I don't want users of the robin_gb library to have to download them.
 
