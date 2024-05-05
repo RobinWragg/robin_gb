@@ -1,7 +1,10 @@
+// This file produces a binary that loads multiple roms and emulates them simultaneously,
+// rendering them in a grid using wgpu.
+
 use bytemuck;
 use futures::executor::block_on;
 use glam::f32::Mat4;
-use robin_gb;
+use robin_gb::GameBoy;
 use std::fs;
 use std::sync::Arc;
 use wgpu;
@@ -10,12 +13,12 @@ use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::{Window, WindowBuilder};
 
-// rwtodo: This will become a simple app that loads multiple instances of the emulator and loads a different game in each one.
-
 // rwtodo: Put this and winit/wgpu behind a feature, as I don't want users of the robin_gb library to have to download them.
 
-const WINDOW_WIDTH: u32 = 160 * 4;
-const WINDOW_HEIGHT: u32 = 144 * 4;
+const GAME_BOYS_PER_COLUMN: u32 = 5;
+const GAME_BOYS_PER_ROW: u32 = 5;
+const WINDOW_WIDTH: u32 = 160 * GAME_BOYS_PER_COLUMN;
+const WINDOW_HEIGHT: u32 = 144 * GAME_BOYS_PER_ROW;
 
 const TEXTURE_SIZE: wgpu::Extent3d = wgpu::Extent3d {
     width: 160,  // rwtodo: constants
@@ -218,6 +221,7 @@ impl<'a> GpuState<'a> {
     #[must_use]
     fn begin_render(&self) -> wgpu::SurfaceTexture {
         self.surface.get_current_texture().unwrap()
+        // rwtodo: clear.
     }
 
     fn finish_render(&self, surface_texture: wgpu::SurfaceTexture) {
@@ -284,9 +288,40 @@ impl<'a> GpuState<'a> {
 }
 
 fn main() {
-    let roms = [fs::read("roms/Tetris.gb").unwrap()];
-    let mut game_boys = roms.map(|rom| robin_gb::GameBoy::new(&rom));
+    // rwtodo: make this a command line argument.
+    let paths = fs::read_dir("roms/romonly").unwrap();
 
+    // Grab the first (GAME_BOYS_PER_ROW * GAME_BOYS_PER_COLUMN) roms from the folder.
+    let roms = {
+        let mut roms = vec![];
+        for path in paths {
+            let path = path.unwrap();
+
+            // Skip non-files
+            if !path.file_type().unwrap().is_file() {
+                continue;
+            }
+
+            // Skip non-.gb files
+            let name = path.file_name().into_string().unwrap();
+            if !name.ends_with(".gb") {
+                continue;
+            }
+
+            let bytes = fs::read(path.path()).unwrap();
+            roms.push(bytes);
+            if roms.len() == (GAME_BOYS_PER_ROW * GAME_BOYS_PER_COLUMN) as usize {
+                break;
+            }
+        }
+        roms
+    };
+
+    // Boot up the game boys.
+    let game_boys = roms.iter().map(|rom| GameBoy::new(&rom));
+    let mut game_boys: Vec<GameBoy> = game_boys.collect();
+
+    // Set up the window.
     let event_loop = EventLoop::new().unwrap();
     event_loop.set_control_flow(ControlFlow::Poll);
 
@@ -298,6 +333,7 @@ fn main() {
         .unwrap()
         .into();
 
+    // Set up wgpu rendering and the transforms for the game boy screens.
     let state = block_on(GpuState::new(&window));
 
     let fullscreen_transform = {
@@ -309,19 +345,34 @@ fn main() {
         m
     };
 
+    let mut tile_transforms = vec![];
+    for column in 0..GAME_BOYS_PER_COLUMN {
+        for row in 0..GAME_BOYS_PER_ROW {
+            let mut tile_transform = fullscreen_transform;
+            tile_transform.x_axis.x /= GAME_BOYS_PER_COLUMN as f32;
+            tile_transform.y_axis.y /= GAME_BOYS_PER_ROW as f32;
+            tile_transform.x_axis.w += (column as f32 / GAME_BOYS_PER_COLUMN as f32) * 2.0;
+            tile_transform.y_axis.w += (row as f32 / GAME_BOYS_PER_COLUMN as f32) * 2.0;
+            tile_transforms.push(tile_transform);
+        }
+    }
+
+    // Run the emulations and render to the grid.
     let _ = event_loop.run(move |event, elwt| match event {
         Event::WindowEvent {
             event: WindowEvent::CloseRequested,
             ..
         } => {
-            println!("The close button was pressed; stopping");
             elwt.exit();
         }
         Event::AboutToWait => {
-            let screen = game_boys[0].emulate_next_frame(); // Just emulate one game boy for now.
-
             let surface_texture = state.begin_render();
-            state.render_gb_screen(&surface_texture, &screen, fullscreen_transform);
+
+            for i in 0..game_boys.len() {
+                let screen = game_boys[i].emulate_next_frame();
+                state.render_gb_screen(&surface_texture, &screen, tile_transforms[i]);
+            }
+
             state.finish_render(surface_texture);
         }
         _ => (),
