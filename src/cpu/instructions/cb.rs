@@ -17,11 +17,12 @@ pub fn execute_cb_instruction(registers: &mut Registers, memory: &mut Memory) ->
 
     let flag_diff = match immediate_byte {
         0x30..=0x37 => swap(&mut operand),
+        0x38..=0x3f => srl(&mut operand),
         0x40..=0x7f => bit(bit_index, operand),
         0x80..=0xbf => res(bit_index, &mut operand),
         0xc0..=0xff => set(bit_index, &mut operand),
         _ => todo!(
-            "Unknown 0xcb opcode {:#04x} at address {:#06x}\n",
+            "CB opcode {:#04x} at address {:#06x}\n",
             immediate_byte,
             registers.pc
         ),
@@ -53,6 +54,20 @@ fn swap(byte_to_swap: &mut u8) -> FlagDiff {
         n: Some(false),
         h: Some(false),
         c: Some(false),
+    }
+}
+
+fn srl(byte_to_shift: &mut u8) -> FlagDiff {
+    let carry_flag = (*byte_to_shift) & make_bit(0) != 0;
+
+    *byte_to_shift >>= 1; // Bit 7 becomes 0.
+    debug_assert!(((*byte_to_shift) & make_bit(7)) == 0); // rwtodo can move this to tests.
+
+    FlagDiff {
+        z: Some((*byte_to_shift) == 0),
+        n: Some(false),
+        h: Some(false),
+        c: Some(carry_flag),
     }
 }
 
@@ -139,6 +154,20 @@ mod tests {
         assert_eq!(get_bit_index_from_immediate_byte(0xf7), 6);
         assert_eq!(get_bit_index_from_immediate_byte(0xf8), 7);
         assert_eq!(get_bit_index_from_immediate_byte(0xff), 7);
+    }
+
+    #[test]
+    fn test_srl_instruction() {
+        for immediate_byte in 0..=0xff {
+            let mut mutated_immediate_byte = immediate_byte;
+            let flag_diff = srl(&mut mutated_immediate_byte);
+            assert_eq!(mutated_immediate_byte, immediate_byte >> 1);
+            assert_eq!(flag_diff.z, Some(immediate_byte & 0b11111110 == 0));
+            assert_eq!(flag_diff.z, Some(mutated_immediate_byte == 0));
+            assert_eq!(flag_diff.h, Some(false));
+            assert_eq!(flag_diff.n, Some(false));
+            assert_eq!(flag_diff.c, Some(immediate_byte & 0b00000001 != 0));
+        }
     }
 
     #[test]
