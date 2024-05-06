@@ -311,6 +311,7 @@ fn main() {
             }
 
             let bytes = fs::read(path.path()).unwrap();
+            println!("{}", path.path().display());
             roms.push(bytes);
             if roms.len() == (GAME_BOYS_PER_ROW * GAME_BOYS_PER_COLUMN) as usize {
                 break;

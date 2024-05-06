@@ -277,7 +277,7 @@ pub fn sub(sub_src: u8, registers: &mut Registers, pc_delta: i16, cycles: u8) ->
     let half_carry = subtraction_produces_half_carry(registers.a, sub_src, registers.f, false);
     let full_carry = subtraction_produces_full_carry(registers.a, sub_src);
 
-    registers.a -= sub_src;
+    registers.a = registers.a.wrapping_sub(sub_src);
 
     CpuDiff::new(pc_delta, cycles)
         .flag_z(registers.a == 0)
@@ -310,7 +310,7 @@ pub fn cp(comparator: u8, registers: &Registers, pc_delta: i16, cycles: u8) -> C
     let half_carry = subtraction_produces_half_carry(registers.a, comparator, registers.f, false);
     let full_carry = subtraction_produces_full_carry(registers.a, comparator);
 
-    let sub_result: u8 = registers.a - comparator;
+    let sub_result: u8 = registers.a.wrapping_sub(comparator);
 
     CpuDiff::new(pc_delta, cycles)
         .flag_z(sub_result == 0)
