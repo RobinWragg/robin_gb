@@ -16,11 +16,12 @@ pub fn execute_cb_instruction(registers: &mut Registers, memory: &mut Memory) ->
     let mut operand: u8 = registers.read_operand_8bit(operand_id, memory);
 
     let flag_diff = match immediate_byte {
+        0x10..=0x17 => rl(&mut operand, registers.f & Registers::FLAG_CARRY != 0),
         0x30..=0x37 => swap(&mut operand),
         0x38..=0x3f => srl(&mut operand),
-        0x40..=0x7f => bit(bit_index, operand),
-        0x80..=0xbf => res(bit_index, &mut operand),
-        0xc0..=0xff => set(bit_index, &mut operand),
+        0x40..=0x7f => bit(operand, bit_index),
+        0x80..=0xbf => res(&mut operand, bit_index),
+        0xc0..=0xff => set(&mut operand, bit_index),
         _ => todo!(
             "CB opcode {:#04x} at address {:#06x}\n",
             immediate_byte,
@@ -40,6 +41,25 @@ pub fn execute_cb_instruction(registers: &mut Registers, memory: &mut Memory) ->
         flag_diff,
         pc_delta: 2,
         cycles,
+    }
+}
+
+fn rl(byte_to_rotate: &mut u8, previous_carry_flag: bool) -> FlagDiff {
+    let new_carry_flag = *byte_to_rotate & make_bit(7) != 0;
+
+    *byte_to_rotate <<= 1;
+    debug_assert_eq!(*byte_to_rotate & make_bit(0), 0);
+
+    // The carry flag dictates the value of the new bit.
+    if previous_carry_flag {
+        *byte_to_rotate |= make_bit(0);
+    }
+
+    FlagDiff {
+        z: Some(*byte_to_rotate == 0),
+        n: Some(false),
+        h: Some(false),
+        c: Some(new_carry_flag),
     }
 }
 
@@ -71,7 +91,7 @@ fn srl(byte_to_shift: &mut u8) -> FlagDiff {
     }
 }
 
-fn bit(bit_index: u8, byte_to_check: u8) -> FlagDiff {
+fn bit(byte_to_check: u8, bit_index: u8) -> FlagDiff {
     FlagDiff {
         z: Some(byte_to_check & (0x01 << bit_index) == 0),
         n: Some(false),
@@ -80,7 +100,7 @@ fn bit(bit_index: u8, byte_to_check: u8) -> FlagDiff {
     }
 }
 
-fn res(bit_index: u8, byte_to_reset: &mut u8) -> FlagDiff {
+fn res(byte_to_reset: &mut u8, bit_index: u8) -> FlagDiff {
     *byte_to_reset &= !(0x01 << bit_index);
     FlagDiff {
         z: None,
@@ -90,7 +110,7 @@ fn res(bit_index: u8, byte_to_reset: &mut u8) -> FlagDiff {
     }
 }
 
-fn set(bit_index: u8, byte_to_set: &mut u8) -> FlagDiff {
+fn set(byte_to_set: &mut u8, bit_index: u8) -> FlagDiff {
     *byte_to_set |= 0x01 << bit_index;
     FlagDiff {
         z: None,
@@ -157,6 +177,41 @@ mod tests {
     }
 
     #[test]
+    fn test_rl_instruction() {
+        let mut byte_to_rotate = 0;
+        let flag_diff = rl(&mut byte_to_rotate, false);
+        assert_eq!(byte_to_rotate, 0);
+        assert_eq!(flag_diff.z, Some(true));
+        assert_eq!(flag_diff.n, Some(false));
+        assert_eq!(flag_diff.h, Some(false));
+        assert_eq!(flag_diff.c, Some(false));
+
+        let mut byte_to_rotate = 0b01000001;
+        let flag_diff = rl(&mut byte_to_rotate, true);
+        assert_eq!(byte_to_rotate, 0b10000011);
+        assert_eq!(flag_diff.z, Some(false));
+        assert_eq!(flag_diff.n, Some(false));
+        assert_eq!(flag_diff.h, Some(false));
+        assert_eq!(flag_diff.c, Some(false));
+
+        let mut byte_to_rotate = 0b10000001;
+        let flag_diff = rl(&mut byte_to_rotate, false);
+        assert_eq!(byte_to_rotate, 0b00000010);
+        assert_eq!(flag_diff.z, Some(false));
+        assert_eq!(flag_diff.n, Some(false));
+        assert_eq!(flag_diff.h, Some(false));
+        assert_eq!(flag_diff.c, Some(true));
+
+        let mut byte_to_rotate = 0b10000001;
+        let flag_diff = rl(&mut byte_to_rotate, true);
+        assert_eq!(byte_to_rotate, 0b00000011);
+        assert_eq!(flag_diff.z, Some(false));
+        assert_eq!(flag_diff.n, Some(false));
+        assert_eq!(flag_diff.h, Some(false));
+        assert_eq!(flag_diff.c, Some(true));
+    }
+
+    #[test]
     fn test_srl_instruction() {
         for immediate_byte in 0..=0xff {
             let mut mutated_immediate_byte = immediate_byte;
@@ -175,7 +230,7 @@ mod tests {
         // Test n, h, and c flags.
         // These flags should be the same for all calls to bit(...).
         let bit_outer = |bit_index, byte_to_check| {
-            let flag_diff = bit(bit_index, byte_to_check);
+            let flag_diff = bit(byte_to_check, bit_index);
 
             assert_eq!(flag_diff.n, Some(false));
             assert_eq!(flag_diff.h, Some(true));
