@@ -80,7 +80,7 @@ pub fn addition_produces_half_carry(a: u8, b: u8, register_f: u8, include_carry:
     i16::from(a & 0x0f) + i16::from(b & 0x0f) + optional_carry > 0x0f
 }
 
-pub fn print_instruction(pc: u16, memory: &mut Memory) {
+pub fn print_instruction(pc: u16, memory: &Memory) {
     let opcode = memory.read(pc);
     match opcode {
         0x00 => println!("NOP"),
@@ -91,6 +91,8 @@ pub fn print_instruction(pc: u16, memory: &mut Memory) {
         0x11 => println!("LD DE,{:#06x}", memory.read_u16(pc + 1)),
         0x20 => println!("JR NZ,{}", 2 + i16::from(memory.read(pc + 1) as i8)),
         0x21 => println!("LD HL,{:#06x}", memory.read_u16(pc + 1)),
+        0x28 => println!("JR Z,{}", 2 + i16::from(memory.read(pc + 1) as i8)),
+        0x2a => println!("LD A,(HL+)"),
         0x2c => println!("INC L"),
         0x32 => println!("LD (HL-),A"),
         0x36 => println!("LD (HL),{:#04x}", memory.read(pc + 1)),
@@ -142,6 +144,7 @@ pub fn print_instruction(pc: u16, memory: &mut Memory) {
         0xc8 => println!("RET Z"),
         0xcd => println!("CALL {:#06x}", memory.read_u16(pc + 1)),
         0xe0 => println!("LDH {:#06x},A", 0xff00 + u16::from(memory.read(pc + 1))),
+        0xe6 => println!("AND {:#04x}", memory.read(pc + 1)),
         0xf0 => println!("LDH A,{:#06x}", 0xff00 + u16::from(memory.read(pc + 1))),
         0xf3 => println!("DI"),
         0xfe => println!("CP {:#04x}", memory.read(pc + 1)),
