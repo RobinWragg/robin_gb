@@ -459,7 +459,7 @@ impl Cpu {
                     .flag_c(new_a & 0x100 != 0)
             } // DAA
             0x28 => {
-                if self.registers.f & Registers::FLAG_ZERO == 0 {
+                if self.registers.f & Registers::FLAG_ZERO != 0 {
                     let imm = immediate_u8() as i8;
                     CpuDiff::new((2 + imm).into(), 12) // rwtodo handle wraparound here.
                 } else {
