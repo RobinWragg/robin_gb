@@ -267,7 +267,7 @@ pub fn adc(add_src: u8, registers: &mut Registers, pc_delta: i16, cycles: u8) ->
     let half_carry_flag = addition_produces_half_carry(registers.a, add_src, registers.f, true);
     let full_carry_flag = addition_produces_full_carry(registers.a, add_src + carry_value);
 
-    registers.a += add_src + carry_value;
+    registers.a = registers.a.wrapping_add(add_src.wrapping_add(carry_value));
 
     CpuDiff::new(pc_delta, cycles)
         .flag_h(half_carry_flag)
