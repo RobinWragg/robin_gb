@@ -250,6 +250,7 @@ impl Cpu {
         debug_assert!(
             self.registers.pc < 0x8000
                 || (self.registers.pc >= 0xff80 && self.registers.pc < 0xffff)
+                || (self.registers.pc >= 0xa000 && self.registers.pc < 0xfe00)
         );
 
         let opcode = memory.read(self.registers.pc);
@@ -440,14 +441,14 @@ impl Cpu {
                     }
                 } else {
                     if self.registers.f & Registers::FLAG_HALFCARRY != 0 {
-                        new_a -= 0x06;
+                        new_a = new_a.wrapping_sub(0x06);
                         if self.registers.f & Registers::FLAG_CARRY == 0 {
                             new_a &= 0xff;
                         }
                     }
 
                     if self.registers.f & Registers::FLAG_CARRY != 0 {
-                        new_a -= 0x60;
+                        new_a = new_a.wrapping_sub(0x60);
                     }
                 }
 
@@ -505,7 +506,7 @@ impl Cpu {
                 CpuDiff::new(1, 8)
             } // LD (HL-),A
             0x33 => {
-                self.registers.sp += 1;
+                self.registers.sp = self.registers.sp.wrapping_add(1);
                 CpuDiff::new(1, 8)
             } // INC SP
             0x34 => {
@@ -544,7 +545,7 @@ impl Cpu {
                 CpuDiff::new(1, 8)
             } // LD A,(HL-)
             0x3b => {
-                self.registers.sp -= 1;
+                self.registers.sp = self.registers.sp.wrapping_sub(1);
                 CpuDiff::new(1, 8)
             } // DEC SP
             0x3c => inc_u8(&mut self.registers.a, self.registers.f, 4), // INC A

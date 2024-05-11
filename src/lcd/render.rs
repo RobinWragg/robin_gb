@@ -207,7 +207,7 @@ impl Renderer {
         let bg_scroll_y = memory.read(0xff42); // rwtodo const
         let bg_scroll_x = memory.read(0xff43); // rwtodo const
 
-        let bg_y = ly + bg_scroll_y; // rwtodo: this might need to wrap.
+        let bg_y = ly.wrapping_add(bg_scroll_y); // rwtodo: be sure that this should wrap.
 
         let tilegrid_y = bg_y / TILE_HEIGHT;
         let tile_line_index = bg_y - tilegrid_y * TILE_HEIGHT;
