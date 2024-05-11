@@ -17,6 +17,7 @@ pub fn execute_cb_instruction(registers: &mut Registers, memory: &mut Memory) ->
 
     let flag_diff = match immediate_byte {
         0x10..=0x17 => rl(&mut operand, registers.f & Registers::FLAG_CARRY != 0),
+        0x18..=0x1f => rr(&mut operand, registers.f & Registers::FLAG_CARRY != 0),
         0x20..=0x27 => sla(&mut operand),
         0x30..=0x37 => swap(&mut operand),
         0x38..=0x3f => srl(&mut operand),
@@ -54,6 +55,25 @@ fn rl(byte_to_rotate: &mut u8, previous_carry_flag: bool) -> FlagDiff {
     // The carry flag dictates the value of the new bit.
     if previous_carry_flag {
         *byte_to_rotate |= make_bit(0);
+    }
+
+    FlagDiff {
+        z: Some(*byte_to_rotate == 0),
+        n: Some(false),
+        h: Some(false),
+        c: Some(new_carry_flag),
+    }
+}
+
+fn rr(byte_to_rotate: &mut u8, previous_carry_flag: bool) -> FlagDiff {
+    let new_carry_flag = *byte_to_rotate & make_bit(0) != 0;
+
+    *byte_to_rotate >>= 1;
+    debug_assert_eq!(*byte_to_rotate & make_bit(7), 0);
+
+    // The carry flag dictates the value of the new bit.
+    if previous_carry_flag {
+        *byte_to_rotate |= make_bit(7);
     }
 
     FlagDiff {
