@@ -19,6 +19,7 @@ pub fn execute_cb_instruction(registers: &mut Registers, memory: &mut Memory) ->
         0x10..=0x17 => rl(&mut operand, registers.f & Registers::FLAG_CARRY != 0),
         0x18..=0x1f => rr(&mut operand, registers.f & Registers::FLAG_CARRY != 0),
         0x20..=0x27 => sla(&mut operand),
+        0x28..=0x2f => sra(&mut operand),
         0x30..=0x37 => swap(&mut operand),
         0x38..=0x3f => srl(&mut operand),
         0x40..=0x7f => bit(operand, bit_index),
@@ -89,6 +90,20 @@ fn sla(byte_to_shift: &mut u8) -> FlagDiff {
 
     *byte_to_shift <<= 1;
     *byte_to_shift &= !make_bit(0); // bit 0 should become 0.
+
+    FlagDiff {
+        z: Some(*byte_to_shift == 0),
+        n: Some(false),
+        h: Some(false),
+        c: Some(carry),
+    }
+}
+
+fn sra(byte_to_shift: &mut u8) -> FlagDiff {
+    let carry = *byte_to_shift & make_bit(0) != 0;
+
+    *byte_to_shift >>= 1;
+    *byte_to_shift |= (*byte_to_shift & make_bit(6)) << 1; // Bit 7 should stay the same.
 
     FlagDiff {
         z: Some(*byte_to_shift == 0),
