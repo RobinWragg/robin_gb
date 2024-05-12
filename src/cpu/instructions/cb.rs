@@ -16,6 +16,7 @@ pub fn execute_cb_instruction(registers: &mut Registers, memory: &mut Memory) ->
     let mut operand: u8 = registers.read_operand_8bit(operand_id, memory);
 
     let flag_diff = match immediate_byte {
+        0x00..=0x07 => rlc(&mut operand),
         0x08..=0x0f => rrc(&mut operand),
         0x10..=0x17 => rl(&mut operand, registers.f & Registers::FLAG_CARRY != 0),
         0x18..=0x1f => rr(&mut operand, registers.f & Registers::FLAG_CARRY != 0),
@@ -26,11 +27,6 @@ pub fn execute_cb_instruction(registers: &mut Registers, memory: &mut Memory) ->
         0x40..=0x7f => bit(operand, bit_index),
         0x80..=0xbf => res(&mut operand, bit_index),
         0xc0..=0xff => set(&mut operand, bit_index),
-        _ => todo!(
-            "CB opcode {:#04x} at address {:#06x}\n",
-            immediate_byte,
-            registers.pc
-        ),
     };
 
     registers.write_operand_8bit(operand, operand_id, memory);
@@ -45,6 +41,25 @@ pub fn execute_cb_instruction(registers: &mut Registers, memory: &mut Memory) ->
         flag_diff,
         pc_delta: 2,
         cycles,
+    }
+}
+
+fn rlc(byte_to_rotate: &mut u8) -> FlagDiff {
+    let carry = if *byte_to_rotate & make_bit(7) != 0 {
+        *byte_to_rotate <<= 1;
+        *byte_to_rotate |= make_bit(0);
+        true
+    } else {
+        *byte_to_rotate <<= 1;
+        *byte_to_rotate &= !make_bit(0);
+        false
+    };
+
+    FlagDiff {
+        z: Some(*byte_to_rotate == 0),
+        n: Some(false),
+        h: Some(false),
+        c: Some(carry),
     }
 }
 
