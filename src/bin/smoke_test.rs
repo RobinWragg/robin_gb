@@ -331,7 +331,7 @@ fn main() {
 
     let size = LogicalSize::new(WINDOW_WIDTH, WINDOW_HEIGHT);
     let window: Arc<Window> = WindowBuilder::new()
-        .with_title("robin_gb test")
+        .with_title("robin_gb smoke test")
         .with_inner_size(size)
         .build(&event_loop)
         .unwrap()
