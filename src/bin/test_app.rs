@@ -9,7 +9,7 @@ use std::fs;
 use std::sync::Arc;
 use wgpu;
 use winit::{
-    dpi::PhysicalSize,
+    dpi::LogicalSize,
     event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::{Window, WindowBuilder},
@@ -17,8 +17,8 @@ use winit::{
 
 // rwtodo: Put this and winit/wgpu behind a feature, as I don't want users of the robin_gb library to have to download them.
 
-const GAME_BOYS_PER_COLUMN: u32 = 5;
-const GAME_BOYS_PER_ROW: u32 = 5;
+const GAME_BOYS_PER_COLUMN: u32 = 4;
+const GAME_BOYS_PER_ROW: u32 = 4;
 const WINDOW_WIDTH: u32 = 160 * GAME_BOYS_PER_COLUMN;
 const WINDOW_HEIGHT: u32 = 144 * GAME_BOYS_PER_ROW;
 
@@ -116,8 +116,9 @@ impl<'a> GpuState<'a> {
             .await
             .unwrap();
 
+        let size = window.inner_size(); // Size in physical pixels
         let config = surface
-            .get_default_config(&adapter, WINDOW_WIDTH, WINDOW_HEIGHT)
+            .get_default_config(&adapter, size.width, size.height)
             .unwrap();
 
         surface.configure(&device, &config);
@@ -328,9 +329,9 @@ fn main() {
     let event_loop = EventLoop::new().unwrap();
     event_loop.set_control_flow(ControlFlow::Poll);
 
-    let size = PhysicalSize::new(WINDOW_WIDTH, WINDOW_HEIGHT);
+    let size = LogicalSize::new(WINDOW_WIDTH, WINDOW_HEIGHT);
     let window: Arc<Window> = WindowBuilder::new()
-        .with_title("robin_gb")
+        .with_title("robin_gb test")
         .with_inner_size(size)
         .build(&event_loop)
         .unwrap()
