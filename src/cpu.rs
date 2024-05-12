@@ -551,13 +551,10 @@ impl Cpu {
             0x3c => inc_u8(&mut self.registers.a, self.registers.f, 4), // INC A
             0x3d => dec_u8(&mut self.registers.a, self.registers.f, 4), // DEC A
             0x3e => ld_reg8_mem8(&mut self.registers.a, immediate_u8()), // LD A,x
-            0x3f => {
-                let previous_carry = self.registers.f & Registers::FLAG_CARRY != 0;
-                CpuDiff::new(1, 4)
-                    .flag_n(false)
-                    .flag_h(false)
-                    .flag_c(previous_carry)
-            } // CCF
+            0x3f => CpuDiff::new(1, 4)
+                .flag_n(false)
+                .flag_h(false)
+                .flag_c(self.registers.f & Registers::FLAG_CARRY == 0), // CCF
             0x40 => nop(), // LD B,B
             0x41 => ld_reg8_reg8(&mut self.registers.b, self.registers.c), // LD B,C
             0x42 => ld_reg8_reg8(&mut self.registers.b, self.registers.d), // LD B,D
