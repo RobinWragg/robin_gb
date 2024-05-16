@@ -144,6 +144,7 @@ pub struct Memory {
     bytes: [u8; Self::ADDRESS_SPACE_SIZE],
     joypad: Joypad, // rwtodo: move back to GameBoy struct.
     banker: Banker,
+    print_serial: bool,
 }
 
 impl Memory {
@@ -184,9 +185,14 @@ impl Memory {
             bytes,
             joypad: Joypad::new(),
             banker,
+            print_serial: false,
         };
 
         new_mem
+    }
+
+    pub fn redirect_serial_to_stdout(&mut self, redirect: bool) {
+        self.print_serial = redirect
     }
 
     pub fn direct_access(&mut self, address: u16) -> &mut u8 {
@@ -222,6 +228,17 @@ impl Memory {
         } else if address == 0xff00 {
             // rwtodo: label 0xff00 as a constant?
             self.bytes[address as usize] = self.get_joypad_register_write_result(value);
+        } else if address == address::SERIAL_CONTROL {
+            self.bytes[address::SERIAL_CONTROL as usize] = value;
+
+            // Write data that would have gone to the serial port to stdout.
+            // No plans for emulating actual serial communication yet.
+            if value == 0x81 && self.print_serial {
+                let serial_byte = self.bytes[address::SERIAL_BYTE as usize];
+                if serial_byte < 128 {
+                    print!("{}", serial_byte as char);
+                }
+            }
         } else if address == 0xff04 {
             // rwtodo: label 0xff04 as a constant?
             self.bytes[address as usize] = 0x00; // Reset timer DIV register. rwtodo: move this responibility into Timer struct

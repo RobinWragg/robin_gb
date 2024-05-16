@@ -45,6 +45,8 @@ mod address {
     pub const LCD_LYC: u16 = 0xff45;
     pub const INTERRUPT_FLAGS: u16 = 0xff0f;
     pub const INTERRUPT_ENABLE: u16 = 0xffff;
+    pub const SERIAL_BYTE: u16 = 0xff01;
+    pub const SERIAL_CONTROL: u16 = 0xff02;
 }
 
 struct Timer {
@@ -145,16 +147,20 @@ pub struct GameBoy {
 }
 
 impl GameBoy {
-    pub fn new(rom_file_data: &[u8]) -> GameBoy {
+    pub fn new(rom_file_data: &[u8]) -> Self {
         let mut memory = Memory::new(&rom_file_data);
         let timer = Timer::new(&mut memory);
 
-        GameBoy {
+        Self {
             lcd: Lcd::new(),
             memory,
             cpu: Cpu::new(),
             timer,
         }
+    }
+
+    pub fn redirect_serial_to_stdout(&mut self, redirect: bool) {
+        self.memory.redirect_serial_to_stdout(redirect)
     }
 
     // rwtodo: returns true if not vblank. not a fan. enum?
