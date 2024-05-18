@@ -53,6 +53,22 @@ enum Mbc {
 
 type CachedBank = [u8; ROM_BANK_SIZE];
 
+mod bank_ranges {
+    use std::ops::RangeInclusive;
+    pub const ROM_0: RangeInclusive<u16> = 0x0000..=0x3fff;
+    pub const ROM_1: RangeInclusive<u16> = 0x4000..=0x7fff;
+    pub const VIDEO_RAM: RangeInclusive<u16> = 0x8000..=0x9fff;
+    pub const EXTERNAL_RAM: RangeInclusive<u16> = 0xa000..=0xbfff;
+    pub const WORK_RAM_STATIC: RangeInclusive<u16> = 0xc000..=0xcfff;
+    pub const WORK_RAM_SWITCHABLE: RangeInclusive<u16> = 0xd000..=0xdfff;
+    pub const ECHO_RAM: RangeInclusive<u16> = 0xe000..=0xfdff;
+    pub const OBJECT_ATTRIBUTES: RangeInclusive<u16> = 0xfe00..=0xfe9f;
+    pub const PROHIBITED: RangeInclusive<u16> = 0xfea0..=0xfeff;
+    pub const IO_REGISTERS: RangeInclusive<u16> = 0xff00..=0xff7f;
+    pub const HIGH_RAM: RangeInclusive<u16> = 0xff80..=0xfffe;
+    pub const INTERRUPT_ENABLE: RangeInclusive<u16> = 0xffff..=0xffff;
+}
+
 struct Banker {
     mbc: Mbc,
     has_ram: bool, // rwtodo do I really need this as well as ram_bank_count?
@@ -63,7 +79,7 @@ struct Banker {
 }
 
 impl Banker {
-    // rwtodo: maybe Memory API access to banks should redirect through the Banker, and Banker could hold the currently active bank data, then I wouldn't need this ugliness where the Banker partially responsible for data living outside the Banker.
+    // rwtodo: maybe Memory API access to banks should redirect through the Banker, and Banker could hold the currently active bank data, then I wouldn't need this ugliness where the Banker is partially responsible for data living outside the Banker.
     fn new(bank_slots_in_memory: &mut [u8; ROM_BANK_SIZE * 2], file_data: &[u8]) -> Banker {
         const CART_KIND_ADDRESS: usize = 0x0147;
 
@@ -220,65 +236,70 @@ impl Memory {
     }
 
     pub fn write(&mut self, address: u16, value: u8) {
-        // rwtodo: let address: usize = address.into(); ?
+        match address {
+            x if bank_ranges::ROM_0.contains(&x) || bank_ranges::ROM_1.contains(&x) => { // perform_cart_control(address, value); rwtodo
+            }
+            0xff00 => {
+                self.bytes[address as usize] = self.get_joypad_register_write_result(value);
+            }
+            address::SERIAL_CONTROL => {
+                self.bytes[address::SERIAL_CONTROL as usize] = value;
 
-        // rwtodo: convert to match statement?
-        if address < 0x8000 {
-            // perform_cart_control(address, value); rwtodo
-        } else if address == 0xff00 {
-            // rwtodo: label 0xff00 as a constant?
-            self.bytes[address as usize] = self.get_joypad_register_write_result(value);
-        } else if address == address::SERIAL_CONTROL {
-            self.bytes[address::SERIAL_CONTROL as usize] = value;
-
-            // Write data that would have gone to the serial port to stdout.
-            // No plans for emulating actual serial communication yet.
-            if value == 0x81 && self.print_serial {
-                let serial_byte = self.bytes[address::SERIAL_BYTE as usize];
-                if serial_byte < 128 {
-                    print!("{}", serial_byte as char);
+                // Write data that would have gone to the serial port to stdout.
+                // No plans for emulating actual serial communication yet.
+                if value == 0x81 && self.print_serial {
+                    let serial_byte = self.bytes[address::SERIAL_BYTE as usize];
+                    if serial_byte < 128 {
+                        print!("{}", serial_byte as char);
+                    }
                 }
             }
-        } else if address == 0xff04 {
-            // rwtodo: label 0xff04 as a constant?
-            self.bytes[address as usize] = 0x00; // Reset timer DIV register. rwtodo: move this responibility into Timer struct
-        } else if address == 0xff46 {
-            // Perform OAM DMA transfer. rwtodo: copying twice here, unless the compiler optimizes it out. Use copy_within on self.memory directly.
-            const SIZE_OF_TRANSFER: usize = 160;
-
-            let mut bytes_to_transfer: [u8; SIZE_OF_TRANSFER] = [0; SIZE_OF_TRANSFER];
-
-            {
-                let src_range_start: usize = (value as usize) * 0x100;
-                let src_range_end: usize = src_range_start + SIZE_OF_TRANSFER;
-                let src_slice = &self.bytes[src_range_start..src_range_end];
-                bytes_to_transfer.copy_from_slice(src_slice);
+            0xff04 => {
+                // rwtodo: label 0xff04 as a constant?
+                self.bytes[address as usize] = 0x00; // Reset timer DIV register. rwtodo: move this responsibility into Timer struct
             }
+            0xff46 => {
+                // Perform OAM DMA transfer. rwtodo: copying twice here, unless the compiler optimizes it out. Use copy_within on self.memory directly.
+                const SIZE_OF_TRANSFER: usize = 160;
 
-            let dst_range_start: usize = 0xfe00;
-            let dst_range_end: usize = dst_range_start + SIZE_OF_TRANSFER;
-            let dst_slice = &mut self.bytes[dst_range_start..dst_range_end];
+                let mut bytes_to_transfer: [u8; SIZE_OF_TRANSFER] = [0; SIZE_OF_TRANSFER];
 
-            dst_slice.copy_from_slice(&bytes_to_transfer);
-        } else {
-            self.bytes[address as usize] = value;
+                {
+                    let src_range_start: usize = (value as usize) * 0x100;
+                    let src_range_end: usize = src_range_start + SIZE_OF_TRANSFER;
+                    let src_slice = &self.bytes[src_range_start..src_range_end];
+                    bytes_to_transfer.copy_from_slice(src_slice);
+                }
 
-            // Memory is duplicated when writing to these registers
-            if address >= 0xc000 && address < 0xde00 {
-                let echo_address = address - 0xc000 + 0xe000;
-                self.bytes[echo_address as usize] = value;
-            } else if address >= 0xe000 && address < 0xfe00 {
-                let echo_address = address - 0xe000 + 0xc000;
+                let dst_range_start: usize = 0xfe00;
+                let dst_range_end: usize = dst_range_start + SIZE_OF_TRANSFER;
+                let dst_slice = &mut self.bytes[dst_range_start..dst_range_end];
+
+                dst_slice.copy_from_slice(&bytes_to_transfer);
+            }
+            x if bank_ranges::WORK_RAM_STATIC.contains(&x) => {
+                self.bytes[address as usize] = value;
+                // Copy to echo RAM
+                let echo_address =
+                    address - bank_ranges::WORK_RAM_STATIC.start() + bank_ranges::ECHO_RAM.start();
                 self.bytes[echo_address as usize] = value;
             }
-
-            // rwtodo: implement cart_state stuff so we can do this.
-            // rwtodo: Also handle the below for MBC3.
-            // if cart_state.mbc_type == MBC_1 && address >= 0xa000 && address < 0xc000 {
-            //     // RAM was written to.
-            //     cart_state.save_file_is_outdated = true;
-            // }
+            x if bank_ranges::ECHO_RAM.contains(&x) => {
+                self.bytes[address as usize] = value;
+                // Copy to work RAM static
+                let echo_address =
+                    address - bank_ranges::ECHO_RAM.start() + bank_ranges::WORK_RAM_STATIC.start();
+                self.bytes[echo_address as usize] = value;
+            }
+            _ => self.bytes[address as usize] = value,
         }
+
+        // rwtodo: implement cart_state stuff so we can do this.
+        // rwtodo: Also handle the below for MBC3.
+        // if cart_state.mbc_type == MBC_1 && address >= 0xa000 && address < 0xc000 {
+        //     // RAM was written to.
+        //     cart_state.save_file_is_outdated = true;
+        // }
     }
 
     pub fn write_u16(&mut self, address: u16, value: u16) {
@@ -289,6 +310,7 @@ impl Memory {
 
     pub fn read(&self, address: u16) -> u8 {
         // rwtodo rom bank slot at address >= 0x4000 && address < 0x8000
+        // rwtodo match statement?
         if address >= 0xfea0 && address <= 0xfeff {
             panic!("Attempted to read from a prohibited region");
         } else {
