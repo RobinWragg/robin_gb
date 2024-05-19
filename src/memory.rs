@@ -311,10 +311,11 @@ impl Memory {
     pub fn read(&self, address: u16) -> u8 {
         // rwtodo rom bank slot at address >= 0x4000 && address < 0x8000
         // rwtodo match statement?
-        if address >= 0xfea0 && address <= 0xfeff {
-            panic!("Attempted to read from a prohibited region");
-        } else {
-            self.bytes[address as usize]
+        match &address {
+            x if bank_ranges::PROHIBITED.contains(x) => {
+                panic!("Attempted to read from a prohibited region")
+            }
+            _ => self.bytes[address as usize],
         }
     }
 
