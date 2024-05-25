@@ -1,6 +1,5 @@
 ![Screenshot](screenshot.png)
 <div align="center">
-
 **A crate for Game Boy emulation**
 
 </div>
