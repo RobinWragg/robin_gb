@@ -6,7 +6,6 @@ use robin_gb::GameBoy;
 use std::fs;
 use std::path::PathBuf;
 
-// #[command(version, about, long_about = None)]
 #[derive(Parser, Debug)]
 struct CliArgs {
     /// One or more paths to rom files to test
