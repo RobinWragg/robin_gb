@@ -1,3 +1,4 @@
+![CI badge](https://github.com/RobinWragg/robin_gb/actions/workflows/main.yml/badge.svg?branch=main)
 ![Screenshot](screenshot.png)
 <div align="center">
 
