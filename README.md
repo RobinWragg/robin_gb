@@ -1,4 +1,4 @@
-![CI badge](https://github.com/RobinWragg/robin_gb/actions/workflows/main.yml/badge.svg?branch=main)
+![CI badge](https://github.com/RobinWragg/robin_gb/actions/workflows/ci.yml/badge.svg?branch=main)
 ![Screenshot](screenshot.png)
 <div align="center">
 
