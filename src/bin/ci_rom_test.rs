@@ -1,7 +1,9 @@
 // This file produces a binary that receives rom files, collects their serial output, and builds an HTML table of the results with ✅ or ❌.
 
 use clap::Parser;
+use regex::Regex;
 use robin_gb::GameBoy;
+use std::fs;
 use std::path::PathBuf;
 
 // #[command(version, about, long_about = None)]
@@ -14,17 +16,45 @@ struct CliArgs {
 
 fn run_rom_test(path: PathBuf) -> Result<String, String> {
     // Validate the path.
-    let path_str = path.to_str().ok_or("Path does not convert to &str")?;
-    if !path.is_file() {
-        return Err(format!("Path is not a file: {}", path_str));
-    }
     let extension = path.extension().and_then(std::ffi::OsStr::to_str);
-    let extension = extension.ok_or(format!("No extension found for path: {}", path_str))?;
+    let extension = extension.ok_or("No extension found for path")?;
     if extension.to_lowercase() != "gb" {
-        return Err(format!("Expected extension 'gb' for path: {}", path_str));
+        return Err("Expected extension 'gb' for path".to_owned());
     }
 
-    Ok("Path is valid. (rom test TODO)".to_owned())
+    // Load the data and boot the Game Boy with serial output enabled.
+    let rom_bytes = fs::read(path).map_err(|e| e.to_string())?;
+    let mut game_boy = GameBoy::new(&rom_bytes);
+    game_boy.record_serial_output(true);
+
+    // Emulate 1 minute's worth of frames (Game Boy runs at 60 FPS).
+    let frame_count = 60 * 60;
+    for _ in 0..frame_count {
+        let _ = game_boy.emulate_next_frame();
+    }
+
+    let mut serial_string = String::new();
+    if let Some(serial) = game_boy.serial_buffer() {
+        for serial_byte in serial {
+            // Grab any ASCII bytes and put them in a string.
+            if *serial_byte < 128 {
+                serial_string.push(*serial_byte as char);
+            }
+        }
+
+        // Shrink all occurrences of whitespace to one space character, for readability.
+        let re = Regex::new(r"\s+").unwrap();
+        serial_string = re.replace_all(&serial_string, " ").to_string();
+        serial_string = serial_string.trim().to_owned();
+
+        if serial_string.to_lowercase().contains("passed") {
+            Ok(serial_string)
+        } else {
+            Err(serial_string)
+        }
+    } else {
+        return Err("Couldn't read serial data".to_owned());
+    }
 }
 
 fn sanitize_html_text(text: &str) -> String {
@@ -38,6 +68,7 @@ fn sanitize_html_text(text: &str) -> String {
 fn main() {
     let args = CliArgs::parse();
 
+    // Open a table in UTF-8 HTML.
     let mut html =
         String::from("<html>\n<head>\n<meta charset=\"UTF-8\">\n</head>\n<body>\n<table>\n");
 
@@ -52,9 +83,11 @@ fn main() {
             Err(e) => format!("❌ {}", e),
         });
 
+        // Add a row to the table.
         html += &format!("<tr>\n<td>{}</td><td>{}</td>\n</tr>\n", name, result);
     }
 
+    // Add all the closing tags.
     html += "</table>\n</body>\n</html>";
     println!("{}", html);
 }
