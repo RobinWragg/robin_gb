@@ -159,8 +159,13 @@ impl GameBoy {
         }
     }
 
-    pub fn redirect_serial_to_stdout(&mut self, redirect: bool) {
-        self.memory.redirect_serial_to_stdout(redirect)
+    /// Redirect the Game Boy's serial output to serial_buffer(). Primarily for rom testing.
+    pub fn record_serial_output(&mut self, record: bool) {
+        self.memory.record_serial_output(record);
+    }
+
+    pub fn serial_buffer(&self) -> &Option<Vec<u8>> {
+        &self.memory.serial_buffer
     }
 
     // rwtodo: returns true if not vblank. not a fan. enum?

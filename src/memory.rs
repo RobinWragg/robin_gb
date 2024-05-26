@@ -160,7 +160,9 @@ pub struct Memory {
     bytes: [u8; Self::ADDRESS_SPACE_SIZE],
     joypad: Joypad, // rwtodo: move back to GameBoy struct.
     banker: Banker,
-    print_serial: bool,
+
+    // This is Some if record_serial_output(true) was called.
+    pub serial_buffer: Option<Vec<u8>>,
 }
 
 impl Memory {
@@ -201,14 +203,18 @@ impl Memory {
             bytes,
             joypad: Joypad::new(),
             banker,
-            print_serial: false,
+            serial_buffer: None,
         };
 
         new_mem
     }
 
-    pub fn redirect_serial_to_stdout(&mut self, redirect: bool) {
-        self.print_serial = redirect
+    pub fn record_serial_output(&mut self, record: bool) {
+        if record {
+            self.serial_buffer = Some(vec![]);
+        } else {
+            self.serial_buffer = None;
+        }
     }
 
     pub fn direct_access(&mut self, address: u16) -> &mut u8 {
@@ -245,12 +251,11 @@ impl Memory {
             address::SERIAL_CONTROL => {
                 self.bytes[address::SERIAL_CONTROL as usize] = value;
 
-                // Write data that would have gone to the serial port to stdout.
+                // Write data that would have gone to the serial port to the buffer.
                 // No plans for emulating actual serial communication yet.
-                if value == 0x81 && self.print_serial {
-                    let serial_byte = self.bytes[address::SERIAL_BYTE as usize];
-                    if serial_byte < 128 {
-                        print!("{}", serial_byte as char);
+                if value == 0x81 {
+                    if let Some(serial_buffer) = &mut self.serial_buffer {
+                        serial_buffer.push(self.bytes[address::SERIAL_BYTE as usize]);
                     }
                 }
             }
