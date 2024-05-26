@@ -2,6 +2,7 @@
 <div align="center">
 
 **A crate for Game Boy emulation**
+
 ![CI badge](https://github.com/RobinWragg/robin_gb/actions/workflows/ci.yml/badge.svg?branch=main)
 
 </div>
