@@ -11,15 +11,21 @@ env:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
-
     steps:
     - uses: actions/checkout@v4
     - run: rustup toolchain install stable --profile minimal # Required for rust-cache
     - uses: Swatinem/rust-cache@v2
     - name: Build
       run: cargo build --verbose
+    - name: Run unit tests
+      run: cargo test --verbose
+    - name: Experiment
+      run: ls -a
+  
+  test:
+    runs-on: ubuntu-latest
+    steps:
     - name: Run unit tests
       run: cargo test --verbose
     - name: Experiment
