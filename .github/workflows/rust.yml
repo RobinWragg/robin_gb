@@ -21,7 +21,8 @@ jobs:
     - name: Run unit tests
       run: cargo test --verbose
     - run: mkdir -p build-artifact
-    - run: mv target/debug/ci_rom_test artifact/ci_rom_test
+    - run: ls -a target/debug
+    - run: mv target/debug/ci_rom_test build-artifact/ci_rom_test
     - uses: actions/upload-artifact@v4
       with:
         name: build-artifact
