@@ -20,7 +20,10 @@ jobs:
       run: cargo build --verbose
     - name: Run unit tests
       run: cargo test --verbose
+    - run: mkdir -p build-artifact
+    - run: mv target/debug/ci_rom_test artifact/ci_rom_test
     - uses: actions/upload-artifact@v4
       with:
-        path: target
+        name: build-artifact
+        path: build-artifact
         overwrite: true
