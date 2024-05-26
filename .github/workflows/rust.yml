@@ -20,3 +20,7 @@ jobs:
       run: cargo build --verbose
     - name: Run unit tests
       run: cargo test --verbose
+    - uses: actions/upload-artifact@v4
+      with:
+        path: target
+        overwrite: true
