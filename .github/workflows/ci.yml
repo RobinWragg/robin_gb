@@ -20,10 +20,11 @@ jobs:
       run: cargo build --verbose
     - name: Run unit tests
       run: cargo test --verbose
-    - run: ls target/debug
     - uses: actions/checkout@v4
       with:
+        path: test_roms
         repository: retrio/gb-test-roms
+    - run: ls
     - name: Run rom tests
       run: target/debug/ci_rom_test >> $GITHUB_STEP_SUMMARY
     
