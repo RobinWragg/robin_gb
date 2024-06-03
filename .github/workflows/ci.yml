@@ -20,6 +20,7 @@ jobs:
       run: cargo build --verbose
     - name: Run unit tests
       run: cargo test --verbose
+    - run: ls -a
     - uses: actions/checkout@v4
       with:
         repository: retrio/gb-test-roms
