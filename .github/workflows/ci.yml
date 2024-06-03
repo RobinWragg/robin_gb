@@ -20,5 +20,9 @@ jobs:
       run: cargo build --verbose
     - name: Run unit tests
       run: cargo test --verbose
-    - run: echo "(Job summary test)" >> $GITHUB_STEP_SUMMARY
+    - uses: actions/checkout@v4
+      with:
+        repository: retrio/gb-test-roms
+    - name: Run rom tests
+      run: target/debug/ci_rom_test >> $GITHUB_STEP_SUMMARY
     
