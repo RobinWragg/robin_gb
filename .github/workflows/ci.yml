@@ -24,7 +24,8 @@ jobs:
       with:
         path: test_roms
         repository: retrio/gb-test-roms
-    - run: ls
     - name: Run rom tests
-      run: target/debug/ci_rom_test >> $GITHUB_STEP_SUMMARY
+      run: target/debug/ci_rom_test test_roms/cpu_instrs/individual/01-special.gb
+    - name: Run rom tests and report
+      run: target/debug/ci_rom_test test_roms/cpu_instrs/individual/01-special.gb >> $GITHUB_STEP_SUMMARY
     
