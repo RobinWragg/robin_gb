@@ -60,6 +60,7 @@ pub fn addition_produces_full_carry(a: u8, b: u8) -> bool {
     i16::from(a) + i16::from(b) > 0xff
 }
 
+// rwtodo: inline the include_carry logic into SBC.
 pub fn subtraction_produces_half_carry(a: u8, b: u8, register_f: u8, include_carry: bool) -> bool {
     let optional_carry: i16 = if include_carry && (register_f & Registers::FLAG_CARRY) != 0 {
         1
@@ -70,6 +71,7 @@ pub fn subtraction_produces_half_carry(a: u8, b: u8, register_f: u8, include_car
     i16::from(a & 0x0f) - i16::from(b & 0x0f) - optional_carry < 0
 }
 
+// rwtodo: the include_carry param is no longer used.
 pub fn addition_produces_half_carry(a: u8, b: u8, register_f: u8, include_carry: bool) -> bool {
     let optional_carry: i16 = if include_carry && (register_f & Registers::FLAG_CARRY) != 0 {
         1
@@ -244,37 +246,48 @@ pub fn call(condition: bool, registers: &mut Registers, memory: &mut Memory) -> 
 }
 
 // rwtodo: Can I reuse this for INC? and SUB for DEC?
-pub fn add_u8(add_src: u8, registers: &mut Registers, pc_delta: i16, cycles: u8) -> CpuDiff {
-    let half_carry = addition_produces_half_carry(registers.a, add_src, registers.f, false);
-    let full_carry = addition_produces_full_carry(registers.a, add_src);
+pub fn add_u8(
+    add_src: u8,
+    register_a: &mut u8,
+    register_f: u8,
+    pc_delta: i16,
+    cycles: u8,
+) -> CpuDiff {
+    let half_carry = addition_produces_half_carry(*register_a, add_src, register_f, false);
+    let full_carry = addition_produces_full_carry(*register_a, add_src);
 
-    registers.a = registers.a.wrapping_add(add_src);
+    *register_a = register_a.wrapping_add(add_src);
 
     CpuDiff::new(pc_delta, cycles)
-        .flag_z(registers.a == 0)
+        .flag_z(*register_a == 0)
         .flag_n(false)
         .flag_h(half_carry)
         .flag_c(full_carry)
 }
 
-pub fn adc(add_src: u8, registers: &mut Registers, pc_delta: i16, cycles: u8) -> CpuDiff {
-    let carry_value = if (registers.f & Registers::FLAG_CARRY) != 0 {
-        1
+pub fn adc(add_src: u8, register_a: &mut u8, register_f: u8, pc_delta: i16, cycles: u8) -> CpuDiff {
+    if (register_f & Registers::FLAG_CARRY) != 0 {
+        let add_cpu_diff = add_u8(
+            add_src.wrapping_add(1),
+            register_a,
+            register_f,
+            pc_delta,
+            cycles,
+        );
+
+        let mut adc_cpu_diff = add_cpu_diff;
+        if add_src == 0xff {
+            adc_cpu_diff.flag_diff.c = Some(add_src == 0xff);
+        }
+
+        if add_src == 0x0f {
+            adc_cpu_diff.flag_diff.h = Some(add_src == 0xff);
+        }
+
+        adc_cpu_diff
     } else {
-        0
-    };
-
-    let half_carry_flag = addition_produces_half_carry(registers.a, add_src, registers.f, true);
-    let full_carry_flag =
-        addition_produces_full_carry(registers.a, add_src.wrapping_add(carry_value));
-
-    registers.a = registers.a.wrapping_add(add_src.wrapping_add(carry_value));
-
-    CpuDiff::new(pc_delta, cycles)
-        .flag_z(registers.a == 0)
-        .flag_n(false)
-        .flag_h(half_carry_flag)
-        .flag_c(full_carry_flag)
+        add_u8(add_src, register_a, register_f, pc_delta, cycles)
+    }
 }
 
 pub fn sub(sub_src: u8, registers: &mut Registers, pc_delta: i16, cycles: u8) -> CpuDiff {
@@ -327,4 +340,46 @@ pub fn rst(address_lower_byte: u8, registers: &mut Registers, memory: &mut Memor
     stack_push(registers.pc + 1, &mut registers.sp, memory);
     registers.pc = address_lower_byte.into();
     CpuDiff::new(0, 16)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_adc_instruction() {
+        // Test without CARRY flag
+        let register_f = 0x00u8;
+        for register_a_original in 0x00u8..=0xffu8 {
+            for immediate_byte in 0x00u8..=0xffu8 {
+                let mut register_a = register_a_original;
+                let cpu_diff = adc(immediate_byte, &mut register_a, register_f, 1, 2);
+                assert_eq!(register_a, register_a_original.wrapping_add(immediate_byte));
+                assert_eq!(cpu_diff.flag_diff.z, Some(register_a == 0));
+                assert_eq!(cpu_diff.flag_diff.n, Some(false));
+                assert_eq!(cpu_diff.flag_diff.c, Some(register_a < register_a_original));
+            }
+        }
+
+        // Test with CARRY flag
+        let register_f = Registers::FLAG_CARRY;
+        for register_a_original in 0x00u8..=0xffu8 {
+            for immediate_byte in 0x00u8..=0xffu8 {
+                let mut register_a = register_a_original;
+                let cpu_diff = adc(immediate_byte, &mut register_a, register_f, 1, 2);
+                assert_eq!(
+                    register_a,
+                    register_a_original
+                        .wrapping_add(immediate_byte)
+                        .wrapping_add(1)
+                );
+                assert_eq!(cpu_diff.flag_diff.z, Some(register_a == 0));
+                assert_eq!(cpu_diff.flag_diff.n, Some(false));
+                assert_eq!(
+                    cpu_diff.flag_diff.c,
+                    Some(register_a <= register_a_original)
+                );
+            }
+        }
+    }
 }
