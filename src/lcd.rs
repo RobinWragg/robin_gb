@@ -25,7 +25,6 @@ This signal is set to 1 if:
 pub struct Lcd {
     renderer: Renderer,
     elapsed_cycles: u32, // rwtodo if this needs to be i32, fine.
-    pixels: Vec<u8>,
 }
 
 impl Lcd {
@@ -38,12 +37,11 @@ impl Lcd {
             // rwtodo: Not sure what the shades should initialize to.
             renderer: render::Renderer::new(),
             elapsed_cycles: 0,
-            pixels: vec![0x00; Lcd::PIXEL_COUNT], // rwtodo: what the right initial pixel value?
         }
     }
 
     // rwtodo return an Option, "Some" if rendered?
-    pub fn update(&mut self, newly_elapsed_cycles: u8, memory: &mut Memory) {
+    pub fn update(&mut self, newly_elapsed_cycles: u8, memory: &mut Memory, frame: &mut [u8]) {
         const LCDC_ENABLED_BIT: u8 = 0x01 << 7;
         const NUM_CYCLES_PER_FULL_SCREEN_REFRESH: u32 = 70224; // Approximately 59.7275Hz
         const NUM_CYCLES_PER_LY_INCREMENT: u32 = 456;
@@ -114,13 +112,12 @@ impl Lcd {
                 *memory.direct_access(address::LCD_STATUS) |= 0x03;
 
                 if previous_mode != 0x03 {
+                    // rwtodo: just write directly to the line-slice of the frame.
                     let screen_line = self.renderer.render_screen_line(memory);
                     let ly = usize::from(*memory.direct_access(address::LCD_LY));
 
-                    // rwtodo: do a memcpy equivalent instead of iterating.
-                    debug_assert_eq!(self.pixels.len(), Lcd::PIXEL_COUNT);
                     for x in 0..Lcd::WIDTH {
-                        self.pixels[ly * Lcd::WIDTH + x] = screen_line[x];
+                        frame[ly * Lcd::WIDTH + x] = screen_line[x];
                     }
                 }
             } else {
@@ -142,9 +139,5 @@ impl Lcd {
                 }
             }
         }
-    }
-
-    pub fn pixels(&mut self) -> Vec<u8> {
-        self.pixels.clone()
     }
 }

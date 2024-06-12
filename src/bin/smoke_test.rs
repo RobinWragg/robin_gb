@@ -235,7 +235,7 @@ impl<'a> GpuState<'a> {
     fn render_gb_screen(
         &self,
         surface_texture: &wgpu::SurfaceTexture,
-        game_boy_screen: &Vec<u8>,
+        game_boy_screen: &[u8],
         matrix: Mat4,
     ) {
         self.queue.write_texture(
@@ -371,9 +371,9 @@ fn main() {
         }
         Event::AboutToWait => {
             let surface_texture = state.begin_render();
-
+            let mut screen: [u8; 160 * 144] = [0; 160 * 144];
             for i in 0..game_boys.len() {
-                let screen = game_boys[i].emulate_next_frame();
+                game_boys[i].emulate_next_frame(&mut screen);
                 state.render_gb_screen(&surface_texture, &screen, tile_transforms[i]);
             }
 

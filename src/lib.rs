@@ -169,7 +169,7 @@ impl GameBoy {
     }
 
     // rwtodo: returns true if not vblank. not a fan. enum?
-    fn emulate_next_line_of_frame(&mut self) -> bool {
+    fn emulate_next_line_of_frame(&mut self, frame: &mut [u8]) -> bool {
         let previous_lcd_ly = *self.memory.direct_access(address::LCD_LY);
 
         let mut total_elapsed_cycles_this_h_blank: u32 = 0;
@@ -178,7 +178,7 @@ impl GameBoy {
         while *self.memory.direct_access(address::LCD_LY) == previous_lcd_ly {
             let elapsed_cycles = self.cpu.execute_next_instruction(&mut self.memory);
 
-            self.lcd.update(elapsed_cycles, &mut self.memory);
+            self.lcd.update(elapsed_cycles, &mut self.memory, frame);
             self.timer.update(elapsed_cycles, &mut self.memory);
 
             total_elapsed_cycles_this_h_blank += u32::from(elapsed_cycles);
@@ -190,15 +190,14 @@ impl GameBoy {
         previous_lcd_ly < 144
     }
 
-    pub fn emulate_next_frame(&mut self) -> Vec<u8> {
+    pub fn emulate_next_frame(&mut self, frame: &mut [u8]) {
+        assert!(frame.len() == 160 * 144); // rwtodo constants. i have constants in lcd.
+
         // Call the function until the vblank phase is exited.
-        while self.emulate_next_line_of_frame() == false {}
+        while self.emulate_next_line_of_frame(frame) == false {}
 
         // Call the function until the vblank phase is entered again.
-        while self.emulate_next_line_of_frame() == true {}
-
-        // The screen has now been fully updated.
-        self.lcd.pixels()
+        while self.emulate_next_line_of_frame(frame) == true {}
     }
 
     // Inform the emulator of button state with this function. All buttons are up (unpressed) when emulation starts.

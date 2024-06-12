@@ -28,8 +28,9 @@ fn run_rom_test(path: PathBuf) -> Result<String, String> {
 
     // Emulate 1 minute's worth of frames (Game Boy runs at 60 FPS).
     let frame_count = 60 * 60;
+    let mut frame: [u8; 160 * 144] = [0; 160 * 144];
     for _ in 0..frame_count {
-        let _ = game_boy.emulate_next_frame();
+        let _ = game_boy.emulate_next_frame(&mut frame);
     }
 
     let mut serial_string = String::new();
