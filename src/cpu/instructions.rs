@@ -266,28 +266,24 @@ pub fn add_u8(
 }
 
 pub fn adc(add_src: u8, register_a: &mut u8, register_f: u8, pc_delta: i16, cycles: u8) -> CpuDiff {
+    let add_diff = add_u8(add_src, register_a, register_f, pc_delta, cycles);
+
     if (register_f & Registers::FLAG_CARRY) != 0 {
-        let add_cpu_diff = add_u8(
-            add_src.wrapping_add(1),
-            register_a,
-            register_f,
-            pc_delta,
-            cycles,
-        );
+        // Add the carry flag and merge both carry flags with those of add_diff.
+        let carry_add_diff = add_u8(1, register_a, register_f, pc_delta, cycles);
 
-        let mut adc_cpu_diff = add_cpu_diff;
-        if add_src == 0xff {
-            adc_cpu_diff.flag_diff.c = Some(add_src == 0xff);
-        }
+        // The flags are guaranteed to be Some(...), so unwrap them.
+        let c = carry_add_diff.flag_diff.c.unwrap();
+        let h = carry_add_diff.flag_diff.h.unwrap();
 
-        if add_src == 0x0f {
-            adc_cpu_diff.flag_diff.h = Some(add_src == 0xff);
-        }
-
-        adc_cpu_diff
-    } else {
-        add_u8(add_src, register_a, register_f, pc_delta, cycles)
+        return CpuDiff::new(pc_delta, cycles)
+            .flag_z(*register_a == 0)
+            .flag_n(false)
+            .flag_c(add_diff.flag_diff.c.unwrap() || c)
+            .flag_h(add_diff.flag_diff.h.unwrap() || h);
     }
+
+    add_diff
 }
 
 pub fn sub(sub_src: u8, registers: &mut Registers, pc_delta: i16, cycles: u8) -> CpuDiff {
