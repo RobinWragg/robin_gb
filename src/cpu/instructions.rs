@@ -286,14 +286,14 @@ pub fn adc(add_src: u8, register_a: &mut u8, register_f: u8, pc_delta: i16, cycl
     add_diff
 }
 
-pub fn sub(sub_src: u8, registers: &mut Registers, pc_delta: i16, cycles: u8) -> CpuDiff {
-    let half_carry = subtraction_produces_half_carry(registers.a, sub_src, registers.f, false);
-    let full_carry = subtraction_produces_full_carry(registers.a, sub_src);
+pub fn sub(sub_src: u8, register_a: &mut u8, register_f: u8, pc_delta: i16, cycles: u8) -> CpuDiff {
+    let half_carry = subtraction_produces_half_carry(*register_a, sub_src, register_f, false);
+    let full_carry = subtraction_produces_full_carry(*register_a, sub_src);
 
-    registers.a = registers.a.wrapping_sub(sub_src);
+    *register_a = register_a.wrapping_sub(sub_src);
 
     CpuDiff::new(pc_delta, cycles)
-        .flag_z(registers.a == 0)
+        .flag_z(*register_a == 0)
         .flag_n(true)
         .flag_h(half_carry)
         .flag_c(full_carry)

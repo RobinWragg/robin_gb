@@ -803,14 +803,6 @@ impl Cpu {
                 1,
                 4,
             ), // ADC A,A
-            0x90 => sub(self.registers.b, &mut self.registers, 1, 4), // SUB B
-            0x91 => sub(self.registers.c, &mut self.registers, 1, 4), // SUB C
-            0x92 => sub(self.registers.d, &mut self.registers, 1, 4), // SUB D
-            0x93 => sub(self.registers.e, &mut self.registers, 1, 4), // SUB E
-            0x94 => sub(self.registers.h, &mut self.registers, 1, 4), // SUB H
-            0x95 => sub(self.registers.l, &mut self.registers, 1, 4), // SUB L
-            0x96 => sub(memory.read(self.registers.hl()), &mut self.registers, 1, 8), // SUB (HL)
-            0x97 => sub(self.registers.a, &mut self.registers, 1, 4), // SUB A
             0x98 => sbc(self.registers.b, &mut self.registers, 1, 4), // SBC A,B
             0x99 => sbc(self.registers.c, &mut self.registers, 1, 4), // SBC A,C
             0x9a => sbc(self.registers.d, &mut self.registers, 1, 4), // SBC A,D
@@ -819,6 +811,62 @@ impl Cpu {
             0x9d => sbc(self.registers.l, &mut self.registers, 1, 4), // SBC A,L
             0x9e => sbc(memory.read(self.registers.hl()), &mut self.registers, 1, 8), // SBC A,(HL)
             0x9f => sbc(self.registers.a, &mut self.registers, 1, 4), // SBC A,A
+            0x90 => sub(
+                self.registers.b,
+                &mut self.registers.a,
+                self.registers.f,
+                1,
+                4,
+            ), // SUB B
+            0x91 => sub(
+                self.registers.c,
+                &mut self.registers.a,
+                self.registers.f,
+                1,
+                4,
+            ), // SUB C
+            0x92 => sub(
+                self.registers.d,
+                &mut self.registers.a,
+                self.registers.f,
+                1,
+                4,
+            ), // SUB D
+            0x93 => sub(
+                self.registers.e,
+                &mut self.registers.a,
+                self.registers.f,
+                1,
+                4,
+            ), // SUB E
+            0x94 => sub(
+                self.registers.h,
+                &mut self.registers.a,
+                self.registers.f,
+                1,
+                4,
+            ), // SUB H
+            0x95 => sub(
+                self.registers.l,
+                &mut self.registers.a,
+                self.registers.f,
+                1,
+                4,
+            ), // SUB L
+            0x96 => sub(
+                memory.read(self.registers.hl()),
+                &mut self.registers.a,
+                self.registers.f,
+                1,
+                8,
+            ), // SUB (HL)
+            0x97 => sub(
+                self.registers.a,
+                &mut self.registers.a,
+                self.registers.f,
+                1,
+                4,
+            ), // SUB A
             0xa0 => and(self.registers.b, &mut self.registers.a, 1, 4), // AND B
             0xa1 => and(self.registers.c, &mut self.registers.a, 1, 4), // AND C
             0xa2 => and(self.registers.d, &mut self.registers.a, 1, 4), // AND D
@@ -969,8 +1017,14 @@ impl Cpu {
                 stack_push(self.registers.de(), &mut self.registers.sp, memory);
                 CpuDiff::new(1, 16)
             } // PUSH DE
-            0xd6 => sub(immediate_u8(), &mut self.registers, 2, 8), // SUB x
-            0xd7 => rst(0x10, &mut self.registers, memory),         // RST 10h
+            0xd6 => sub(
+                immediate_u8(),
+                &mut self.registers.a,
+                self.registers.f,
+                2,
+                8,
+            ), // SUB x
+            0xd7 => rst(0x10, &mut self.registers, memory), // RST 10h
             0xd8 => {
                 if self.registers.f & Registers::FLAG_CARRY != 0 {
                     self.registers.pc = stack_pop(&mut self.registers.sp, memory);
