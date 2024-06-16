@@ -803,14 +803,6 @@ impl Cpu {
                 1,
                 4,
             ), // ADC A,A
-            0x98 => sbc(self.registers.b, &mut self.registers, 1, 4), // SBC A,B
-            0x99 => sbc(self.registers.c, &mut self.registers, 1, 4), // SBC A,C
-            0x9a => sbc(self.registers.d, &mut self.registers, 1, 4), // SBC A,D
-            0x9b => sbc(self.registers.e, &mut self.registers, 1, 4), // SBC A,E
-            0x9c => sbc(self.registers.h, &mut self.registers, 1, 4), // SBC A,H
-            0x9d => sbc(self.registers.l, &mut self.registers, 1, 4), // SBC A,L
-            0x9e => sbc(memory.read(self.registers.hl()), &mut self.registers, 1, 8), // SBC A,(HL)
-            0x9f => sbc(self.registers.a, &mut self.registers, 1, 4), // SBC A,A
             0x90 => sub(
                 self.registers.b,
                 &mut self.registers.a,
@@ -867,6 +859,62 @@ impl Cpu {
                 1,
                 4,
             ), // SUB A
+            0x98 => sbc(
+                self.registers.b,
+                &mut self.registers.a,
+                self.registers.f,
+                1,
+                4,
+            ), // SBC A,B
+            0x99 => sbc(
+                self.registers.c,
+                &mut self.registers.a,
+                self.registers.f,
+                1,
+                4,
+            ), // SBC A,C
+            0x9a => sbc(
+                self.registers.d,
+                &mut self.registers.a,
+                self.registers.f,
+                1,
+                4,
+            ), // SBC A,D
+            0x9b => sbc(
+                self.registers.e,
+                &mut self.registers.a,
+                self.registers.f,
+                1,
+                4,
+            ), // SBC A,E
+            0x9c => sbc(
+                self.registers.h,
+                &mut self.registers.a,
+                self.registers.f,
+                1,
+                4,
+            ), // SBC A,H
+            0x9d => sbc(
+                self.registers.l,
+                &mut self.registers.a,
+                self.registers.f,
+                1,
+                4,
+            ), // SBC A,L
+            0x9e => sbc(
+                memory.read(self.registers.hl()),
+                &mut self.registers.a,
+                self.registers.f,
+                1,
+                8,
+            ), // SBC A,(HL)
+            0x9f => sbc(
+                self.registers.a,
+                &mut self.registers.a,
+                self.registers.f,
+                1,
+                4,
+            ), // SBC A,A
             0xa0 => and(self.registers.b, &mut self.registers.a, 1, 4), // AND B
             0xa1 => and(self.registers.c, &mut self.registers.a, 1, 4), // AND C
             0xa2 => and(self.registers.d, &mut self.registers.a, 1, 4), // AND D
@@ -1053,8 +1101,14 @@ impl Cpu {
                 memory,
             ), // CALL C,xx
             0xdd => unreachable!("Invalid opcode"),
-            0xde => sbc(immediate_u8(), &mut self.registers, 2, 8), // SBC A,x
-            0xdf => rst(0x18, &mut self.registers, memory),         // RST 18h
+            0xde => sbc(
+                immediate_u8(),
+                &mut self.registers.a,
+                self.registers.f,
+                2,
+                8,
+            ), // SBC A,x
+            0xdf => rst(0x18, &mut self.registers, memory), // RST 18h
             0xe0 => {
                 memory.write(0xff00 + u16::from(immediate_u8()), self.registers.a);
                 CpuDiff::new(2, 12)

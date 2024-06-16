@@ -299,23 +299,25 @@ pub fn sub(sub_src: u8, register_a: &mut u8, register_f: u8, pc_delta: i16, cycl
         .flag_c(full_carry)
 }
 
-pub fn sbc(sub_src: u8, registers: &mut Registers, pc_delta: i16, cycles: u8) -> CpuDiff {
-    let carry = if (registers.f & Registers::FLAG_CARRY) != 0 {
-        1
-    } else {
-        0
-    };
+pub fn sbc(sub_src: u8, register_a: &mut u8, register_f: u8, pc_delta: i16, cycles: u8) -> CpuDiff {
+    let sub_diff = sub(sub_src, register_a, register_f, pc_delta, cycles);
 
-    let half_carry = subtraction_produces_half_carry(registers.a, sub_src, registers.f, true);
-    let full_carry = subtraction_produces_full_carry(registers.a, sub_src.wrapping_add(carry));
+    if (register_f & Registers::FLAG_CARRY) != 0 {
+        // Subtract the carry flag and merge both carry flags with those of sub_diff.
+        let carry_sub_diff = sub(1, register_a, register_f, pc_delta, cycles);
 
-    registers.a = registers.a.wrapping_sub(sub_src.wrapping_add(carry));
+        // The flags are guaranteed to be Some(...), so unwrap them.
+        let c = carry_sub_diff.flag_diff.c.unwrap();
+        let h = carry_sub_diff.flag_diff.h.unwrap();
 
-    CpuDiff::new(pc_delta, cycles)
-        .flag_z(registers.a == 0)
-        .flag_n(true)
-        .flag_h(half_carry)
-        .flag_c(full_carry)
+        return CpuDiff::new(pc_delta, cycles)
+            .flag_z(*register_a == 0)
+            .flag_n(true)
+            .flag_c(sub_diff.flag_diff.c.unwrap() || c)
+            .flag_h(sub_diff.flag_diff.h.unwrap() || h);
+    }
+
+    sub_diff
 }
 
 // rwtodo: I think this always increments pc by 1, so that param can be removed.
