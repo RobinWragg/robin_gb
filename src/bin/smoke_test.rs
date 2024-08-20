@@ -46,6 +46,7 @@ fn create_pipeline(
             module: &shader,
             entry_point: "vs_main",
             buffers: &[],
+            compilation_options: Default::default(),
         },
         fragment: Some(wgpu::FragmentState {
             module: &shader,
@@ -55,6 +56,7 @@ fn create_pipeline(
                 blend: Some(wgpu::BlendState::REPLACE),
                 write_mask: wgpu::ColorWrites::ALL,
             })],
+            compilation_options: Default::default(),
         }),
         primitive: wgpu::PrimitiveState {
             topology: wgpu::PrimitiveTopology::TriangleStrip,
@@ -71,7 +73,8 @@ fn create_pipeline(
             mask: !0,
             alpha_to_coverage_enabled: false,
         },
-        multiview: None, // 5.
+        multiview: None,
+        cache: None,
     })
 }
 
@@ -110,6 +113,7 @@ impl<'a> GpuState<'a> {
                     required_features: wgpu::Features::empty(),
                     required_limits: wgpu::Limits::downlevel_webgl2_defaults(),
                     label: None,
+                    memory_hints: wgpu::MemoryHints::Performance,
                 },
                 None,
             )
