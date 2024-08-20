@@ -2,17 +2,17 @@
 // rendering them in a grid using wgpu.
 
 use bytemuck;
-use futures::executor::block_on;
 use glam::f32::Mat4;
 use robin_gb::GameBoy;
 use std::fs;
 use std::sync::Arc;
 use wgpu;
 use winit::{
+    application::ApplicationHandler,
     dpi::LogicalSize,
-    event::{Event, WindowEvent},
-    event_loop::{ControlFlow, EventLoop},
-    window::{Window, WindowBuilder},
+    event::WindowEvent,
+    event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
+    window::{Window, WindowId},
 };
 
 // rwtodo: Put this and winit/wgpu behind a feature, as I don't want users of the robin_gb library to have to download them.
@@ -294,95 +294,115 @@ impl<'a> GpuState<'a> {
     }
 }
 
-fn main() {
-    // rwtodo: make this a command line argument.
-    let paths = fs::read_dir("roms/romonly").unwrap();
+#[derive(Default)]
+struct App<'a> {
+    window: Option<Arc<Window>>,
+    state: Option<GpuState<'a>>,
+    game_boys: Vec<GameBoy>,
+    tile_transforms: Vec<Mat4>,
+}
 
-    // Grab the first (GAME_BOYS_PER_ROW * GAME_BOYS_PER_COLUMN) roms from the folder.
-    let roms = {
-        let mut roms = vec![];
-        for path in paths {
-            let path = path.unwrap();
+impl ApplicationHandler for App<'_> {
+    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        // TODO:
+        let size = LogicalSize::new(WINDOW_WIDTH, WINDOW_HEIGHT);
 
-            // Skip non-files
-            if !path.file_type().unwrap().is_file() {
-                continue;
+        let window = Arc::new(
+            event_loop
+                .create_window(
+                    Window::default_attributes()
+                        .with_title("robin_gb smoke test")
+                        .with_inner_size(size),
+                )
+                .unwrap(),
+        );
+
+        // Set up wgpu rendering and the transforms for the game boy screens.
+        self.state = Some(pollster::block_on(GpuState::new(&window)));
+        self.window = Some(window.clone());
+
+        // rwtodo: make this a command line argument.
+        let paths = fs::read_dir("roms/romonly").unwrap();
+
+        // Grab the first (GAME_BOYS_PER_ROW * GAME_BOYS_PER_COLUMN) roms from the folder.
+        let roms = {
+            let mut roms = vec![];
+            for path in paths {
+                let path = path.unwrap();
+
+                // Skip non-files
+                if !path.file_type().unwrap().is_file() {
+                    continue;
+                }
+
+                // Skip non-.gb files
+                let name = path.file_name().into_string().unwrap();
+                if !name.ends_with(".gb") {
+                    continue;
+                }
+
+                let bytes = fs::read(path.path()).unwrap();
+                println!("{}", path.path().display());
+                roms.push(bytes);
+                if roms.len() == (GAME_BOYS_PER_ROW * GAME_BOYS_PER_COLUMN) as usize {
+                    break;
+                }
             }
+            roms
+        };
 
-            // Skip non-.gb files
-            let name = path.file_name().into_string().unwrap();
-            if !name.ends_with(".gb") {
-                continue;
+        // Boot up the game boys.
+        self.game_boys = roms.iter().map(|rom| GameBoy::new(&rom)).collect();
+
+        let fullscreen_transform = {
+            let mut m = Mat4::IDENTITY;
+            m.x_axis.x = 2.0;
+            m.y_axis.y = 2.0;
+            m.x_axis.w = -1.0;
+            m.y_axis.w = -1.0;
+            m
+        };
+
+        for column in 0..GAME_BOYS_PER_COLUMN {
+            for row in 0..GAME_BOYS_PER_ROW {
+                let mut tile_transform = fullscreen_transform;
+                tile_transform.x_axis.x /= GAME_BOYS_PER_COLUMN as f32;
+                tile_transform.y_axis.y /= GAME_BOYS_PER_ROW as f32;
+                tile_transform.x_axis.w += (column as f32 / GAME_BOYS_PER_COLUMN as f32) * 2.0;
+                tile_transform.y_axis.w += (row as f32 / GAME_BOYS_PER_COLUMN as f32) * 2.0;
+                self.tile_transforms.push(tile_transform);
             }
-
-            let bytes = fs::read(path.path()).unwrap();
-            println!("{}", path.path().display());
-            roms.push(bytes);
-            if roms.len() == (GAME_BOYS_PER_ROW * GAME_BOYS_PER_COLUMN) as usize {
-                break;
-            }
-        }
-        roms
-    };
-
-    // Boot up the game boys.
-    let game_boys = roms.iter().map(|rom| GameBoy::new(&rom));
-    let mut game_boys: Vec<GameBoy> = game_boys.collect();
-
-    // Set up the window.
-    let event_loop = EventLoop::new().unwrap();
-    event_loop.set_control_flow(ControlFlow::Poll);
-
-    let size = LogicalSize::new(WINDOW_WIDTH, WINDOW_HEIGHT);
-    let window: Arc<Window> = WindowBuilder::new()
-        .with_title("robin_gb smoke test")
-        .with_inner_size(size)
-        .build(&event_loop)
-        .unwrap()
-        .into();
-
-    // Set up wgpu rendering and the transforms for the game boy screens.
-    let state = block_on(GpuState::new(&window));
-
-    let fullscreen_transform = {
-        let mut m = Mat4::IDENTITY;
-        m.x_axis.x = 2.0;
-        m.y_axis.y = 2.0;
-        m.x_axis.w = -1.0;
-        m.y_axis.w = -1.0;
-        m
-    };
-
-    let mut tile_transforms = vec![];
-    for column in 0..GAME_BOYS_PER_COLUMN {
-        for row in 0..GAME_BOYS_PER_ROW {
-            let mut tile_transform = fullscreen_transform;
-            tile_transform.x_axis.x /= GAME_BOYS_PER_COLUMN as f32;
-            tile_transform.y_axis.y /= GAME_BOYS_PER_ROW as f32;
-            tile_transform.x_axis.w += (column as f32 / GAME_BOYS_PER_COLUMN as f32) * 2.0;
-            tile_transform.y_axis.w += (row as f32 / GAME_BOYS_PER_COLUMN as f32) * 2.0;
-            tile_transforms.push(tile_transform);
         }
     }
 
-    // Run the emulations and render to the grid.
-    let _ = event_loop.run(move |event, elwt| match event {
-        Event::WindowEvent {
-            event: WindowEvent::CloseRequested,
-            ..
-        } => {
-            elwt.exit();
-        }
-        Event::AboutToWait => {
-            let surface_texture = state.begin_render();
-            let mut screen: [u8; 160 * 144] = [0; 160 * 144];
-            for i in 0..game_boys.len() {
-                game_boys[i].emulate_next_frame(&mut screen);
-                state.render_gb_screen(&surface_texture, &screen, tile_transforms[i]);
-            }
+    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+        self.window.as_ref().unwrap().request_redraw();
+    }
 
-            state.finish_render(surface_texture);
+    fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
+        let state = self.state.as_ref().unwrap();
+        match event {
+            WindowEvent::CloseRequested => event_loop.exit(),
+            WindowEvent::RedrawRequested => {
+                let surface_texture = state.begin_render();
+                let mut screen: [u8; 160 * 144] = [0; 160 * 144];
+                for i in 0..self.game_boys.len() {
+                    self.game_boys[i].emulate_next_frame(&mut screen);
+                    state.render_gb_screen(&surface_texture, &screen, self.tile_transforms[i]);
+                }
+
+                state.finish_render(surface_texture);
+            }
+            _ => (),
         }
-        _ => (),
-    });
+    }
+}
+
+fn main() {
+    let event_loop = EventLoop::new().unwrap();
+    event_loop.set_control_flow(ControlFlow::Poll);
+
+    // Run the emulations and render to the grid.
+    let mut app = App::default();
+    let _ = event_loop.run_app(&mut app);
 }
