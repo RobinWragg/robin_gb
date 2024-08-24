@@ -1,6 +1,7 @@
 #![allow(dead_code)] // rwtodo: remove.
 
 mod cpu;
+pub mod gpu;
 mod lcd;
 mod memory;
 
