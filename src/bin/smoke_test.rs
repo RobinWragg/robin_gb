@@ -115,7 +115,8 @@ impl ApplicationHandler for App<'_> {
                 let mut screen: [u8; 160 * 144] = [0; 160 * 144];
                 for i in 0..self.game_boys.len() {
                     self.game_boys[i].emulate_next_frame(&mut screen);
-                    state.render_gb_screen(&screen, self.tile_transforms[i]);
+                    state.write_texture(&screen, 160, 144);
+                    state.render_quad(self.tile_transforms[i]);
                 }
 
                 state.finish_frame();

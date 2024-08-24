@@ -1,6 +1,6 @@
 use bytemuck;
 use egui;
-pub use glam::f32::Mat4; // TODO: maybe don't expose math types from gpu.rs
+pub use glam::f32::{Mat4, Vec2}; // TODO: maybe don't expose math types from gpu.rs
 use std::sync::Arc;
 use wgpu;
 use winit::window::Window;
@@ -267,8 +267,8 @@ impl<'a> State<'a> {
         surface_texture.unwrap().present();
     }
 
-    // rwtodo: I think I can pass around a fixed-size array, but I would have to keep moving it.
-    pub fn render_gb_screen(&self, game_boy_screen: &[u8], matrix: Mat4) {
+    // TODO: Only greyscale game boy textures for now.
+    pub fn write_texture(&self, pixels: &[u8], width: i32, height: i32) {
         self.queue.write_texture(
             wgpu::ImageCopyTexture {
                 texture: &self.texture,
@@ -276,26 +276,35 @@ impl<'a> State<'a> {
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
             },
-            game_boy_screen,
+            pixels,
             wgpu::ImageDataLayout {
                 offset: 0,
-                bytes_per_row: Some(160),  // rwtodo: constant
-                rows_per_image: Some(144), // rwtodo: constant
+                bytes_per_row: Some(width.try_into().unwrap()),
+                rows_per_image: Some(height.try_into().unwrap()),
             },
             TEXTURE_SIZE,
         );
+    }
 
-        let vertex_floats = vec![
-            0.1f32, 0.1, 0.9, 0.1, 0.1, 0.9, 0.1, 0.9, 0.9, 0.1, 0.9, 0.9,
-        ];
-        let vertex_bytes = bytemuck::cast_slice(&vertex_floats);
-        self.queue
-            .write_buffer(&self.vertex_buffer, 0, vertex_bytes);
+    pub fn render_triangles(&self, vertices: &[Vec2], matrix: Mat4) {
+        // Get the bytes and write to its wgpu buffer
+        {
+            let mut floats = Vec::with_capacity(vertices.len() * 2);
+            floats.resize(vertices.len() * 2, 0.0f32);
+            for i in 0..vertices.len() {
+                vertices[i].write_to_slice(&mut floats[i * 2..=i * 2 + 1]);
+            }
+            let bytes = bytemuck::cast_slice(&floats);
+            self.queue.write_buffer(&self.vertex_buffer, 0, bytes);
+        }
 
-        let matrix_floats = matrix.to_cols_array();
-        let matrix_bytes = bytemuck::bytes_of(&matrix_floats);
-        self.queue
-            .write_buffer(&self.matrix_buffer, 0, matrix_bytes);
+        // Write the matrix to its wgpu buffer
+        {
+            let matrix_floats = matrix.to_cols_array();
+            let matrix_bytes = bytemuck::bytes_of(&matrix_floats);
+            self.queue
+                .write_buffer(&self.matrix_buffer, 0, matrix_bytes);
+        }
 
         let mut encoder = self
             .device
@@ -325,9 +334,21 @@ impl<'a> State<'a> {
             render_pass.set_pipeline(&self.pipeline);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             render_pass.set_bind_group(0, &self.bind_group, &[]);
-            render_pass.draw(0..6, 0..1);
+            render_pass.draw(0..vertices.len() as u32, 0..1);
         } // We're dropping render_pass here to unborrow the encoder.
 
         self.queue.submit(std::iter::once(encoder.finish()));
+    }
+
+    pub fn render_quad(&self, matrix: Mat4) {
+        let vertices = vec![
+            Vec2::new(0.1, 0.1),
+            Vec2::new(0.9, 0.1),
+            Vec2::new(0.1, 0.9),
+            Vec2::new(0.1, 0.9),
+            Vec2::new(0.9, 0.1),
+            Vec2::new(0.9, 0.9),
+        ];
+        self.render_triangles(&vertices, matrix);
     }
 }
