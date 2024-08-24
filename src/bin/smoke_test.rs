@@ -2,11 +2,12 @@
 // rendering them in a grid using wgpu.
 
 use bytemuck;
+use egui;
 use glam::f32::Mat4;
 use robin_gb::GameBoy;
 use std::fs;
 use std::sync::Arc;
-use wgpu;
+use wgpu::{self, RenderPassColorAttachment};
 use winit::{
     application::ApplicationHandler,
     dpi::LogicalSize,
@@ -39,13 +40,22 @@ fn create_pipeline(
         bind_group_layouts: &[bind_group_layout],
         push_constant_ranges: &[],
     });
+    let vertex_buffer_layout = wgpu::VertexBufferLayout {
+        array_stride: std::mem::size_of::<[f32; 2]>() as wgpu::BufferAddress,
+        step_mode: wgpu::VertexStepMode::Vertex,
+        attributes: &[wgpu::VertexAttribute {
+            offset: 0,
+            shader_location: 0,
+            format: wgpu::VertexFormat::Float32x2,
+        }],
+    };
     device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
         label: Some("Render Pipeline"),
         layout: Some(&render_pipeline_layout),
         vertex: wgpu::VertexState {
             module: &shader,
             entry_point: "vs_main",
-            buffers: &[],
+            buffers: &[vertex_buffer_layout],
             compilation_options: Default::default(),
         },
         fragment: Some(wgpu::FragmentState {
@@ -59,10 +69,10 @@ fn create_pipeline(
             compilation_options: Default::default(),
         }),
         primitive: wgpu::PrimitiveState {
-            topology: wgpu::PrimitiveTopology::TriangleStrip,
+            topology: wgpu::PrimitiveTopology::TriangleList,
             strip_index_format: None,
             front_face: wgpu::FrontFace::Ccw,
-            cull_mode: Some(wgpu::Face::Back),
+            cull_mode: None,
             polygon_mode: wgpu::PolygonMode::Fill,
             unclipped_depth: false,
             conservative: false,
@@ -86,6 +96,8 @@ struct GpuState<'a> {
     texture: wgpu::Texture,
     bind_group: wgpu::BindGroup,
     matrix_buffer: wgpu::Buffer,
+    vertex_buffer: wgpu::Buffer,
+    egui_ctx: egui::Context,
 }
 
 impl<'a> GpuState<'a> {
@@ -157,7 +169,16 @@ impl<'a> GpuState<'a> {
                 size: std::mem::size_of::<Mat4>() as u64,
                 mapped_at_creation: false,
             };
-            // device.create_buffer_init(&d)
+            device.create_buffer(&desc)
+        };
+
+        let vertex_buffer = {
+            let desc = wgpu::BufferDescriptor {
+                label: None,
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                size: 3000, // TODO
+                mapped_at_creation: false,
+            };
             device.create_buffer(&desc)
         };
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -222,6 +243,8 @@ impl<'a> GpuState<'a> {
             texture,
             bind_group,
             matrix_buffer,
+            vertex_buffer,
+            egui_ctx: egui::Context::default(),
         }
     }
 
@@ -232,6 +255,28 @@ impl<'a> GpuState<'a> {
     }
 
     fn finish_render(&self, surface_texture: wgpu::SurfaceTexture) {
+        let raw_input = egui::RawInput::default();
+        let full_output = self.egui_ctx.run(raw_input, |ctx| {
+            egui::CentralPanel::default().show(&ctx, |ui| {
+                ui.label("Hello world!");
+                if ui.button("Click me").clicked() {
+                    // take some action here
+                }
+            });
+        });
+
+        let clipped_primitives = self
+            .egui_ctx
+            .tessellate(full_output.shapes, full_output.pixels_per_point);
+
+        for prim in clipped_primitives {
+            let mut mesh = match prim.primitive {
+                egui::epaint::Primitive::Mesh(m) => m,
+                _ => unreachable!(),
+            };
+        }
+        // paint(full_output.textures_delta, clipped_primitives);
+
         surface_texture.present();
     }
 
@@ -257,6 +302,13 @@ impl<'a> GpuState<'a> {
             },
             TEXTURE_SIZE,
         );
+
+        let vertex_floats = vec![
+            0.1f32, 0.1, 0.9, 0.1, 0.1, 0.9, 0.1, 0.9, 0.9, 0.1, 0.9, 0.9,
+        ];
+        let vertex_bytes = bytemuck::cast_slice(&vertex_floats);
+        self.queue
+            .write_buffer(&self.vertex_buffer, 0, vertex_bytes);
 
         let matrix_floats = matrix.to_cols_array();
         let matrix_bytes = bytemuck::bytes_of(&matrix_floats);
@@ -286,8 +338,9 @@ impl<'a> GpuState<'a> {
             });
 
             render_pass.set_pipeline(&self.pipeline);
+            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             render_pass.set_bind_group(0, &self.bind_group, &[]);
-            render_pass.draw(0..4, 0..1);
+            render_pass.draw(0..6, 0..1);
         } // We're dropping render_pass here to unborrow the encoder.
 
         self.queue.submit(std::iter::once(encoder.finish()));
@@ -322,7 +375,7 @@ impl ApplicationHandler for App<'_> {
         self.window = Some(window.clone());
 
         // rwtodo: make this a command line argument.
-        let paths = fs::read_dir("roms/romonly").unwrap();
+        let paths = fs::read_dir("/Users/robin/Desktop/robin_gb/roms/romonly").unwrap();
 
         // Grab the first (GAME_BOYS_PER_ROW * GAME_BOYS_PER_COLUMN) roms from the folder.
         let roms = {
