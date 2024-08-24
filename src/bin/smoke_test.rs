@@ -106,18 +106,19 @@ impl ApplicationHandler for App<'_> {
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
-        let state = self.state.as_ref().unwrap();
+        let state = self.state.as_mut().unwrap();
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::RedrawRequested => {
-                let surface_texture = state.begin_render();
+                state.begin_frame();
+
                 let mut screen: [u8; 160 * 144] = [0; 160 * 144];
                 for i in 0..self.game_boys.len() {
                     self.game_boys[i].emulate_next_frame(&mut screen);
-                    state.render_gb_screen(&surface_texture, &screen, self.tile_transforms[i]);
+                    state.render_gb_screen(&screen, self.tile_transforms[i]);
                 }
 
-                state.finish_render(surface_texture);
+                state.finish_frame();
             }
             _ => (),
         }

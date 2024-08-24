@@ -72,6 +72,7 @@ fn create_pipeline(
 
 pub struct State<'a> {
     surface: wgpu::Surface<'a>,
+    surface_texture: Option<wgpu::SurfaceTexture>,
     device: wgpu::Device,
     queue: wgpu::Queue,
     pipeline: wgpu::RenderPipeline,
@@ -219,6 +220,7 @@ impl<'a> State<'a> {
 
         Self {
             surface,
+            surface_texture: None,
             device,
             queue,
             pipeline,
@@ -230,45 +232,43 @@ impl<'a> State<'a> {
         }
     }
 
-    #[must_use]
-    pub fn begin_render(&self) -> wgpu::SurfaceTexture {
-        self.surface.get_current_texture().unwrap()
+    pub fn begin_frame(&mut self) {
+        self.surface_texture = Some(self.surface.get_current_texture().unwrap());
         // rwtodo: clear.
     }
 
-    pub fn finish_render(&self, surface_texture: wgpu::SurfaceTexture) {
-        let raw_input = egui::RawInput::default();
-        let full_output = self.egui_ctx.run(raw_input, |ctx| {
-            egui::CentralPanel::default().show(&ctx, |ui| {
-                ui.label("Hello world!");
-                if ui.button("Click me").clicked() {
-                    // take some action here
-                }
-            });
-        });
+    pub fn finish_frame(&mut self) {
+        // let raw_input = egui::RawInput::default();
+        // let full_output = self.egui_ctx.run(raw_input, |ctx| {
+        //     egui::CentralPanel::default().show(&ctx, |ui| {
+        //         ui.label("Hello world!");
+        //         if ui.button("Click me").clicked() {
+        //             // take some action here
+        //         }
+        //     });
+        // });
 
-        let clipped_primitives = self
-            .egui_ctx
-            .tessellate(full_output.shapes, full_output.pixels_per_point);
+        // let clipped_primitives = self
+        //     .egui_ctx
+        //     .tessellate(full_output.shapes, full_output.pixels_per_point);
 
-        for prim in clipped_primitives {
-            let _mesh = match prim.primitive {
-                egui::epaint::Primitive::Mesh(m) => m,
-                _ => unreachable!(),
-            };
-        }
+        // for prim in clipped_primitives {
+        //     let _mesh = match prim.primitive {
+        //         egui::epaint::Primitive::Mesh(m) => m,
+        //         _ => unreachable!(),
+        //     };
+        // }
         // paint(full_output.textures_delta, clipped_primitives);
 
-        surface_texture.present();
+        // let mut t: Option<wgpu::SurfaceTexture> = None;
+        // self.surface_texture = std::mem::replace(&mut t, self.surface_texture);
+
+        let surface_texture = std::mem::replace(&mut self.surface_texture, None);
+        surface_texture.unwrap().present();
     }
 
     // rwtodo: I think I can pass around a fixed-size array, but I would have to keep moving it.
-    pub fn render_gb_screen(
-        &self,
-        surface_texture: &wgpu::SurfaceTexture,
-        game_boy_screen: &[u8],
-        matrix: Mat4,
-    ) {
+    pub fn render_gb_screen(&self, game_boy_screen: &[u8], matrix: Mat4) {
         self.queue.write_texture(
             wgpu::ImageCopyTexture {
                 texture: &self.texture,
@@ -301,7 +301,10 @@ impl<'a> State<'a> {
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
         {
-            let view = surface_texture
+            let view = self
+                .surface_texture
+                .as_ref()
+                .unwrap()
                 .texture
                 .create_view(&wgpu::TextureViewDescriptor::default());
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
