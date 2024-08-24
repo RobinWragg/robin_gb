@@ -1,7 +1,9 @@
 // This file produces a binary that loads multiple roms and emulates them simultaneously,
 // rendering them in a grid using wgpu.
 
-use robin_gb::gpu;
+use robin_gb::common_types::*;
+use robin_gb::debugger::Debugger;
+use robin_gb::gpu::Gpu;
 use robin_gb::GameBoy;
 use std::fs;
 use std::sync::Arc;
@@ -23,9 +25,10 @@ const WINDOW_HEIGHT: u32 = 144 * GAME_BOYS_PER_ROW;
 #[derive(Default)]
 struct App<'a> {
     window: Option<Arc<Window>>,
-    state: Option<gpu::State<'a>>,
+    gpu: Option<Gpu<'a>>,
     game_boys: Vec<GameBoy>,
-    tile_transforms: Vec<gpu::Mat4>,
+    tile_transforms: Vec<Mat4>,
+    debugger: Debugger,
 }
 
 impl ApplicationHandler for App<'_> {
@@ -44,7 +47,7 @@ impl ApplicationHandler for App<'_> {
         );
 
         // Set up wgpu rendering and the transforms for the game boy screens.
-        self.state = Some(pollster::block_on(gpu::State::new(&window)));
+        self.gpu = Some(pollster::block_on(Gpu::new(&window))); // TODO: Figure out how to move this complexity into gpu.rs.
         self.window = Some(window.clone());
 
         // rwtodo: make this a command line argument.
@@ -81,7 +84,7 @@ impl ApplicationHandler for App<'_> {
         self.game_boys = roms.iter().map(|rom| GameBoy::new(&rom)).collect();
 
         let fullscreen_transform = {
-            let mut m = gpu::Mat4::IDENTITY;
+            let mut m = Mat4::IDENTITY;
             m.x_axis.x = 2.0;
             m.y_axis.y = 2.0;
             m.x_axis.w = -1.0;
@@ -106,20 +109,21 @@ impl ApplicationHandler for App<'_> {
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
-        let state = self.state.as_mut().unwrap();
+        let gpu = self.gpu.as_mut().unwrap();
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::RedrawRequested => {
-                state.begin_frame();
+                gpu.begin_frame();
 
                 let mut screen: [u8; 160 * 144] = [0; 160 * 144];
                 for i in 0..self.game_boys.len() {
                     self.game_boys[i].emulate_next_frame(&mut screen);
-                    state.write_texture(&screen, 160, 144);
-                    state.render_quad(self.tile_transforms[i]);
+                    gpu.write_texture(&screen, 160, 144);
+                    gpu.render_quad(self.tile_transforms[i]);
                 }
 
-                state.finish_frame();
+                self.debugger.render(gpu);
+                gpu.finish_frame();
             }
             _ => (),
         }

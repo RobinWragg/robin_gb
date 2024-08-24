@@ -1,6 +1,5 @@
+use crate::common_types::*;
 use bytemuck;
-use egui;
-pub use glam::f32::{Mat4, Vec2}; // TODO: maybe don't expose math types from gpu.rs
 use std::sync::Arc;
 use wgpu;
 use winit::window::Window;
@@ -70,7 +69,7 @@ fn create_pipeline(
     })
 }
 
-pub struct State<'a> {
+pub struct Gpu<'a> {
     surface: wgpu::Surface<'a>,
     surface_texture: Option<wgpu::SurfaceTexture>,
     device: wgpu::Device,
@@ -80,11 +79,10 @@ pub struct State<'a> {
     bind_group: wgpu::BindGroup,
     matrix_buffer: wgpu::Buffer,
     vertex_buffer: wgpu::Buffer,
-    egui_ctx: egui::Context,
 }
 
-impl<'a> State<'a> {
-    pub async fn new(window: &Arc<Window>) -> State<'a> {
+impl<'a> Gpu<'a> {
+    pub async fn new(window: &Arc<Window>) -> Gpu<'a> {
         let (surface, adapter) = {
             let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
                 backends: wgpu::Backends::all(),
@@ -228,7 +226,6 @@ impl<'a> State<'a> {
             bind_group,
             matrix_buffer,
             vertex_buffer,
-            egui_ctx: egui::Context::default(),
         }
     }
 
@@ -238,31 +235,6 @@ impl<'a> State<'a> {
     }
 
     pub fn finish_frame(&mut self) {
-        // let raw_input = egui::RawInput::default();
-        // let full_output = self.egui_ctx.run(raw_input, |ctx| {
-        //     egui::CentralPanel::default().show(&ctx, |ui| {
-        //         ui.label("Hello world!");
-        //         if ui.button("Click me").clicked() {
-        //             // take some action here
-        //         }
-        //     });
-        // });
-
-        // let clipped_primitives = self
-        //     .egui_ctx
-        //     .tessellate(full_output.shapes, full_output.pixels_per_point);
-
-        // for prim in clipped_primitives {
-        //     let _mesh = match prim.primitive {
-        //         egui::epaint::Primitive::Mesh(m) => m,
-        //         _ => unreachable!(),
-        //     };
-        // }
-        // paint(full_output.textures_delta, clipped_primitives);
-
-        // let mut t: Option<wgpu::SurfaceTexture> = None;
-        // self.surface_texture = std::mem::replace(&mut t, self.surface_texture);
-
         let surface_texture = std::mem::replace(&mut self.surface_texture, None);
         surface_texture.unwrap().present();
     }
@@ -287,7 +259,7 @@ impl<'a> State<'a> {
     }
 
     pub fn render_triangles(&self, vertices: &[Vec2], matrix: Mat4) {
-        // Get the bytes and write to its wgpu buffer
+        // Get the bytes and write to the wgpu vertex buffer
         {
             let mut floats = Vec::with_capacity(vertices.len() * 2);
             floats.resize(vertices.len() * 2, 0.0f32);
