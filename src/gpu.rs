@@ -10,6 +10,9 @@ const TEXTURE_SIZE: wgpu::Extent3d = wgpu::Extent3d {
     depth_or_array_layers: 1,
 };
 
+// TODO: I wonder if I can resize the buffers on the fly.
+const VERTEX_BUFFERS_SIZE: u64 = 3000;
+
 pub struct Gpu<'a> {
     surface: wgpu::Surface<'a>,
     surface_texture: Option<wgpu::SurfaceTexture>,
@@ -19,7 +22,8 @@ pub struct Gpu<'a> {
     texture: wgpu::Texture,
     bind_group: wgpu::BindGroup,
     matrix_buffer: wgpu::Buffer,
-    vertex_buffer: wgpu::Buffer,
+    vertpos_buffer: wgpu::Buffer,
+    texcoord_buffer: wgpu::Buffer,
 }
 
 impl<'a> Gpu<'a> {
@@ -94,15 +98,25 @@ impl<'a> Gpu<'a> {
             device.create_buffer(&desc)
         };
 
-        let vertex_buffer = {
+        let vertpos_buffer = {
             let desc = wgpu::BufferDescriptor {
                 label: None,
                 usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                size: 3000, // TODO
+                size: VERTEX_BUFFERS_SIZE,
                 mapped_at_creation: false,
             };
             device.create_buffer(&desc)
         };
+        let texcoord_buffer = {
+            let desc = wgpu::BufferDescriptor {
+                label: None,
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                size: VERTEX_BUFFERS_SIZE,
+                mapped_at_creation: false,
+            };
+            device.create_buffer(&desc)
+        };
+
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             entries: &[
                 wgpu::BindGroupLayoutEntry {
@@ -166,7 +180,8 @@ impl<'a> Gpu<'a> {
             texture,
             bind_group,
             matrix_buffer,
-            vertex_buffer,
+            vertpos_buffer,
+            texcoord_buffer,
         }
     }
 
@@ -176,13 +191,12 @@ impl<'a> Gpu<'a> {
         bind_group_layout: &wgpu::BindGroupLayout,
     ) -> wgpu::RenderPipeline {
         let shader = device.create_shader_module(wgpu::include_wgsl!("bin/shader.wgsl"));
-        let render_pipeline_layout =
-            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: None,
-                bind_group_layouts: &[bind_group_layout],
-                push_constant_ranges: &[],
-            });
-        let vertex_buffer_layout = wgpu::VertexBufferLayout {
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: None,
+            bind_group_layouts: &[bind_group_layout],
+            push_constant_ranges: &[],
+        });
+        let vert_pos_layout = wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<[f32; 2]>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,
             attributes: &[wgpu::VertexAttribute {
@@ -191,13 +205,22 @@ impl<'a> Gpu<'a> {
                 format: wgpu::VertexFormat::Float32x2,
             }],
         };
+        let texcoord_layout = wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<[f32; 2]>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &[wgpu::VertexAttribute {
+                offset: 0,
+                shader_location: 1,
+                format: wgpu::VertexFormat::Float32x2,
+            }],
+        };
         device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Render Pipeline"),
-            layout: Some(&render_pipeline_layout),
+            layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: "vs_main",
-                buffers: &[vertex_buffer_layout],
+                buffers: &[vert_pos_layout, texcoord_layout],
                 compilation_options: Default::default(),
             },
             fragment: Some(wgpu::FragmentState {
@@ -259,17 +282,23 @@ impl<'a> Gpu<'a> {
         );
     }
 
-    pub fn render_triangles(&self, vertices: &[Vec2], matrix: Mat4) {
-        // Get the bytes and write to the wgpu vertex buffer
-        {
-            let mut floats = Vec::with_capacity(vertices.len() * 2);
-            floats.resize(vertices.len() * 2, 0.0f32);
-            for i in 0..vertices.len() {
-                vertices[i].write_to_slice(&mut floats[i * 2..=i * 2 + 1]);
-            }
-            let bytes = bytemuck::cast_slice(&floats);
-            self.queue.write_buffer(&self.vertex_buffer, 0, bytes);
+    fn write_vec2_slice_to_buffer(&self, buffer: &wgpu::Buffer, slice: &[Vec2]) {
+        let mut floats = Vec::with_capacity(slice.len() * 2);
+        floats.resize(slice.len() * 2, 0.0f32);
+        for i in 0..slice.len() {
+            slice[i].write_to_slice(&mut floats[i * 2..=i * 2 + 1]);
         }
+        let bytes = bytemuck::cast_slice(&floats);
+        self.queue.write_buffer(buffer, 0, bytes);
+    }
+
+    pub fn render_textured_triangles(&self, vertices: &[Vec2], tex_coords: &[Vec2], matrix: Mat4) {
+        self.write_vec2_slice_to_buffer(&self.texcoord_buffer, tex_coords);
+        self.render_triangles(vertices, matrix);
+    }
+
+    pub fn render_triangles(&self, vertices: &[Vec2], matrix: Mat4) {
+        self.write_vec2_slice_to_buffer(&self.vertpos_buffer, vertices);
 
         // Write the matrix to its wgpu buffer
         {
@@ -305,7 +334,8 @@ impl<'a> Gpu<'a> {
             });
 
             render_pass.set_pipeline(&self.pipeline);
-            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+            render_pass.set_vertex_buffer(0, self.vertpos_buffer.slice(..));
+            render_pass.set_vertex_buffer(1, self.texcoord_buffer.slice(..));
             render_pass.set_bind_group(0, &self.bind_group, &[]);
             render_pass.draw(0..vertices.len() as u32, 0..1);
         } // We're dropping render_pass here to unborrow the encoder.
