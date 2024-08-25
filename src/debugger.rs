@@ -1,6 +1,7 @@
 use crate::common_types::*;
 use crate::gpu::Gpu;
 use egui;
+use egui::epaint::{image::ImageData, textures::*};
 
 #[derive(Default)]
 pub struct Debugger {
@@ -15,6 +16,22 @@ impl Debugger {
                 ui.label("Hello world!");
             });
         });
+
+        if !full_output.textures_delta.set.is_empty() {
+            assert_eq!(full_output.textures_delta.set.len(), 1);
+            let (tex_id, delta) = &full_output.textures_delta.set[0];
+            assert_eq!(delta.options.magnification, TextureFilter::Linear);
+            assert_eq!(delta.options.minification, TextureFilter::Linear);
+            assert_eq!(delta.options.wrap_mode, TextureWrapMode::ClampToEdge);
+            assert_eq!(delta.pos, None);
+            let font_image = match &delta.image {
+                ImageData::Color(_) => todo!(),
+                ImageData::Font(f) => f,
+            };
+            dbg!(font_image.size);
+            dbg!(font_image.pixels[0]);
+        }
+        assert!(full_output.textures_delta.free.is_empty());
 
         let clipped_primitives = self
             .ctx
@@ -33,6 +50,11 @@ impl Debugger {
                 vert_positions.push(v2::new(vert.pos.x, vert.pos.y));
                 vert_texcoords.push(v2::new(vert.uv.x, vert.uv.y));
             }
+
+            let tex_id = match mesh.texture_id {
+                egui::TextureId::Managed(id) => id,
+                _ => unreachable!(),
+            };
 
             let scale = 0.01; // TODO: Arbitrary.
             let scale_matrix = Mat4::from_scale(v3::new(scale, scale, 1.0));
