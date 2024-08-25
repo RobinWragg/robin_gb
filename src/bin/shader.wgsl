@@ -23,9 +23,9 @@ fn vs_main(@builtin(vertex_index) vert_index: u32, vert: VertInput) -> VertToFra
 
 // Fragment shader
 
-@group(0) @binding(1)
+@group(1) @binding(0)
 var t_0: texture_2d<f32>;
-@group(0) @binding(2)
+@group(1) @binding(1)
 var s_0: sampler;
 
 @fragment
