@@ -243,10 +243,10 @@ impl<'a> Gpu<'a> {
         })
     }
 
-    pub fn create_texture(&mut self, width: u32, height: u32) -> usize {
+    pub fn create_texture(&mut self, width: usize, height: usize) -> usize {
         let size = wgpu::Extent3d {
-            width,
-            height,
+            width: width as u32,
+            height: height as u32,
             depth_or_array_layers: 1,
         };
         let texture = self.device.create_texture(&wgpu::TextureDescriptor {
@@ -306,8 +306,9 @@ impl<'a> Gpu<'a> {
     }
 
     // TODO: Only greyscale game boy textures for now.
-    pub fn write_texture(&self, texture_id: usize, pixels: &[u8], width: i32, height: i32) {
+    pub fn write_texture(&self, texture_id: usize, pixels: &[u8]) {
         let texture = &self.textures[texture_id];
+        assert!(pixels.len() == (texture.size.width * texture.size.height) as usize);
         self.queue.write_texture(
             wgpu::ImageCopyTexture {
                 texture: &texture.texture,
@@ -318,8 +319,8 @@ impl<'a> Gpu<'a> {
             pixels,
             wgpu::ImageDataLayout {
                 offset: 0,
-                bytes_per_row: Some(width.try_into().unwrap()),
-                rows_per_image: Some(height.try_into().unwrap()),
+                bytes_per_row: Some(texture.size.width), // TODO: Will need to be changed for RGBA!
+                rows_per_image: Some(texture.size.height), // TODO: Will need to be changed for RGBA!
             },
             texture.size,
         );

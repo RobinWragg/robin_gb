@@ -120,7 +120,7 @@ impl ApplicationHandler for App<'_> {
                 let mut screen: [u8; 160 * 144] = [0; 160 * 144];
                 for i in 0..self.game_boys.len() {
                     self.game_boys[i].emulate_next_frame(&mut screen);
-                    gpu.write_texture(self.rewritable_texture, &screen, 160, 144);
+                    gpu.write_texture(self.rewritable_texture, &screen);
                     gpu.render_textured_quad(self.rewritable_texture, self.tile_transforms[i]);
                 }
 
