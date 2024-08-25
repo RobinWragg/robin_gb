@@ -119,7 +119,7 @@ impl ApplicationHandler for App<'_> {
                 for i in 0..self.game_boys.len() {
                     self.game_boys[i].emulate_next_frame(&mut screen);
                     gpu.write_texture(&screen, 160, 144);
-                    gpu.render_quad(self.tile_transforms[i]);
+                    gpu.render_textured_quad(self.tile_transforms[i]);
                 }
 
                 self.debugger.render(gpu);

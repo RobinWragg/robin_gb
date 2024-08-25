@@ -343,8 +343,8 @@ impl<'a> Gpu<'a> {
         self.queue.submit(std::iter::once(encoder.finish()));
     }
 
-    pub fn render_quad(&self, matrix: Mat4) {
-        let vertices = vec![
+    pub fn render_textured_quad(&self, matrix: Mat4) {
+        let positions = vec![
             Vec2::new(0.1, 0.1),
             Vec2::new(0.9, 0.1),
             Vec2::new(0.1, 0.9),
@@ -352,6 +352,14 @@ impl<'a> Gpu<'a> {
             Vec2::new(0.9, 0.1),
             Vec2::new(0.9, 0.9),
         ];
-        self.render_triangles(&vertices, matrix);
+        let texcoords = vec![
+            Vec2::new(0.0, 1.0),
+            Vec2::new(1.0, 1.0),
+            Vec2::new(0.0, 0.0),
+            Vec2::new(0.0, 0.0),
+            Vec2::new(1.0, 1.0),
+            Vec2::new(1.0, 0.0),
+        ];
+        self.render_textured_triangles(&positions, &texcoords, matrix);
     }
 }
