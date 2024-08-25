@@ -4,14 +4,14 @@ use std::sync::Arc;
 use wgpu;
 use winit::window::Window;
 
-const TEXTURE_SIZE: wgpu::Extent3d = wgpu::Extent3d {
-    width: 160,  // rwtodo: constants
-    height: 144, // rwtodo: constants
-    depth_or_array_layers: 1,
-};
-
 // TODO: I wonder if I can resize the buffers on the fly.
 const VERTEX_BUFFERS_SIZE: u64 = 3000;
+
+struct Texture {
+    texture: wgpu::Texture,
+    size: wgpu::Extent3d,
+    bindgroup: wgpu::BindGroup,
+}
 
 pub struct Gpu<'a> {
     surface: wgpu::Surface<'a>,
@@ -19,9 +19,10 @@ pub struct Gpu<'a> {
     device: wgpu::Device,
     queue: wgpu::Queue,
     pipeline: wgpu::RenderPipeline,
-    texture: wgpu::Texture,
     uniforms_bindgroup: wgpu::BindGroup,
-    texture_bindgroup: wgpu::BindGroup,
+    texture_bindgroup_layout: wgpu::BindGroupLayout,
+    textures: Vec<Texture>,
+    active_texture_id: usize,
     matrix_buffer: wgpu::Buffer,
     vertpos_buffer: wgpu::Buffer,
     texcoord_buffer: wgpu::Buffer,
@@ -65,17 +66,6 @@ impl<'a> Gpu<'a> {
             .unwrap();
 
         surface.configure(&device, &config);
-
-        let texture = device.create_texture(&wgpu::TextureDescriptor {
-            size: TEXTURE_SIZE,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::R8Unorm, // One byte per pixel
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            label: Some("default gb texture"),
-            view_formats: &[],
-        });
 
         let matrix_buffer = {
             let desc = wgpu::BufferDescriptor {
@@ -153,33 +143,6 @@ impl<'a> Gpu<'a> {
                 ],
                 label: None,
             });
-        let texture_bindgroup = {
-            let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-            let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-                // rwtodo: what are the defaults?
-                address_mode_u: wgpu::AddressMode::ClampToEdge,
-                address_mode_v: wgpu::AddressMode::ClampToEdge,
-                address_mode_w: wgpu::AddressMode::ClampToEdge,
-                mag_filter: wgpu::FilterMode::Nearest,
-                min_filter: wgpu::FilterMode::Nearest,
-                mipmap_filter: wgpu::FilterMode::Nearest,
-                ..Default::default()
-            });
-            device.create_bind_group(&wgpu::BindGroupDescriptor {
-                layout: &texture_bindgroup_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&texture_view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::Sampler(&sampler),
-                    },
-                ],
-                label: Some("default gb texture bind group"),
-            })
-        };
 
         let pipeline = Self::create_pipeline(
             &device,
@@ -187,19 +150,29 @@ impl<'a> Gpu<'a> {
             &[&uniforms_bindgroup_layout, &texture_bindgroup_layout],
         );
 
-        Self {
+        let mut gpu = Self {
             surface,
             surface_texture: None,
             device,
             queue,
             pipeline,
-            texture,
             uniforms_bindgroup,
-            texture_bindgroup,
+            texture_bindgroup_layout,
             matrix_buffer,
             vertpos_buffer,
             texcoord_buffer,
-        }
+            textures: vec![],
+            active_texture_id: 0,
+        };
+
+        // A bit of a hack: I'm creating a default texture so we always have one to give to the
+        // renderpass, otherwise we'd have to create a separate pipeline and shader that don't
+        // refer to textures. We don't need that extra complexity. (yet?)
+        // TODO: I could treat texture id 0 as 'no texture' and set a uniform to disable sampling.
+        let default_texture = gpu.create_texture(16, 16);
+        assert_eq!(default_texture, 0);
+
+        gpu
     }
 
     fn create_pipeline(
@@ -270,6 +243,58 @@ impl<'a> Gpu<'a> {
         })
     }
 
+    pub fn create_texture(&mut self, width: u32, height: u32) -> usize {
+        let size = wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        };
+        let texture = self.device.create_texture(&wgpu::TextureDescriptor {
+            size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::R8Unorm, // One byte per pixel
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            label: Some("default gb texture"),
+            view_formats: &[],
+        });
+        let bindgroup = {
+            let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+            let sampler = self.device.create_sampler(&wgpu::SamplerDescriptor {
+                // rwtodo: what are the defaults?
+                address_mode_u: wgpu::AddressMode::ClampToEdge,
+                address_mode_v: wgpu::AddressMode::ClampToEdge,
+                address_mode_w: wgpu::AddressMode::ClampToEdge,
+                mag_filter: wgpu::FilterMode::Nearest,
+                min_filter: wgpu::FilterMode::Nearest,
+                mipmap_filter: wgpu::FilterMode::Nearest,
+                ..Default::default()
+            });
+            self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                layout: &self.texture_bindgroup_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&texture_view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(&sampler),
+                    },
+                ],
+                label: Some("default gb texture bind group"),
+            })
+        };
+
+        self.textures.push(Texture {
+            texture,
+            size,
+            bindgroup,
+        });
+        self.textures.len() - 1
+    }
+
     pub fn begin_frame(&mut self) {
         self.surface_texture = Some(self.surface.get_current_texture().unwrap());
         // rwtodo: clear.
@@ -281,10 +306,11 @@ impl<'a> Gpu<'a> {
     }
 
     // TODO: Only greyscale game boy textures for now.
-    pub fn write_texture(&self, pixels: &[u8], width: i32, height: i32) {
+    pub fn write_texture(&self, texture_id: usize, pixels: &[u8], width: i32, height: i32) {
+        let texture = &self.textures[texture_id];
         self.queue.write_texture(
             wgpu::ImageCopyTexture {
-                texture: &self.texture,
+                texture: &texture.texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
@@ -295,7 +321,7 @@ impl<'a> Gpu<'a> {
                 bytes_per_row: Some(width.try_into().unwrap()),
                 rows_per_image: Some(height.try_into().unwrap()),
             },
-            TEXTURE_SIZE,
+            texture.size,
         );
     }
 
@@ -309,8 +335,15 @@ impl<'a> Gpu<'a> {
         self.queue.write_buffer(buffer, 0, bytes);
     }
 
-    pub fn render_textured_triangles(&self, vertices: &[v2], tex_coords: &[v2], matrix: Mat4) {
+    pub fn render_textured_triangles(
+        &mut self,
+        vertices: &[v2],
+        tex_coords: &[v2],
+        texture_id: usize,
+        matrix: Mat4,
+    ) {
         self.write_v2_slice_to_buffer(&self.texcoord_buffer, tex_coords);
+        self.active_texture_id = texture_id;
         self.render_triangles(vertices, matrix);
     }
 
@@ -354,14 +387,19 @@ impl<'a> Gpu<'a> {
             render_pass.set_vertex_buffer(0, self.vertpos_buffer.slice(..));
             render_pass.set_vertex_buffer(1, self.texcoord_buffer.slice(..));
             render_pass.set_bind_group(0, &self.uniforms_bindgroup, &[]);
-            render_pass.set_bind_group(1, &self.texture_bindgroup, &[]);
+
+            // This is kind of jank tbh; I'm setting a texture even when I'm not using it.
+            // The alternative is to create more than one pipeline and shader.
+            let texture_bindgroup = &self.textures[self.active_texture_id].bindgroup;
+            render_pass.set_bind_group(1, texture_bindgroup, &[]);
+
             render_pass.draw(0..vertices.len() as u32, 0..1);
         } // We're dropping render_pass here to unborrow the encoder.
 
         self.queue.submit(std::iter::once(encoder.finish()));
     }
 
-    pub fn render_textured_quad(&self, matrix: Mat4) {
+    pub fn render_textured_quad(&mut self, texture_id: usize, matrix: Mat4) {
         let positions = vec![
             v2::new(0.1, 0.1),
             v2::new(0.9, 0.1),
@@ -378,6 +416,6 @@ impl<'a> Gpu<'a> {
             v2::new(1.0, 1.0),
             v2::new(1.0, 0.0),
         ];
-        self.render_textured_triangles(&positions, &texcoords, matrix);
+        self.render_textured_triangles(&positions, &texcoords, texture_id, matrix);
     }
 }

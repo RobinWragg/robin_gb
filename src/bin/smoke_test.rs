@@ -26,6 +26,7 @@ const WINDOW_HEIGHT: u32 = 144 * GAME_BOYS_PER_ROW;
 struct App<'a> {
     window: Option<Arc<Window>>,
     gpu: Option<Gpu<'a>>,
+    rewritable_texture: usize,
     game_boys: Vec<GameBoy>,
     tile_transforms: Vec<Mat4>,
     debugger: Debugger,
@@ -48,6 +49,7 @@ impl ApplicationHandler for App<'_> {
 
         // Set up wgpu rendering and the transforms for the game boy screens.
         self.gpu = Some(pollster::block_on(Gpu::new(&window))); // TODO: Figure out how to move this complexity into gpu.rs.
+        self.rewritable_texture = self.gpu.as_mut().unwrap().create_texture(160, 144);
         self.window = Some(window.clone());
 
         // rwtodo: make this a command line argument.
@@ -118,8 +120,8 @@ impl ApplicationHandler for App<'_> {
                 let mut screen: [u8; 160 * 144] = [0; 160 * 144];
                 for i in 0..self.game_boys.len() {
                     self.game_boys[i].emulate_next_frame(&mut screen);
-                    gpu.write_texture(&screen, 160, 144);
-                    gpu.render_textured_quad(self.tile_transforms[i]);
+                    gpu.write_texture(self.rewritable_texture, &screen, 160, 144);
+                    gpu.render_textured_quad(self.rewritable_texture, self.tile_transforms[i]);
                 }
 
                 self.debugger.render(gpu);

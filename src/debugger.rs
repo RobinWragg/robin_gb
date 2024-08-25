@@ -9,7 +9,7 @@ pub struct Debugger {
 }
 
 impl Debugger {
-    pub fn render(&self, gpu: &Gpu) {
+    pub fn render(&self, gpu: &mut Gpu) {
         let raw_input = egui::RawInput::default();
         let full_output = self.ctx.run(raw_input, |ctx| {
             egui::CentralPanel::default().show(&ctx, |ui| {
@@ -56,9 +56,16 @@ impl Debugger {
                 _ => unreachable!(),
             };
 
+            let PLACEHOLDER_TEXTURE_ID_TODO = 0;
+
             let scale = 0.01; // TODO: Arbitrary.
             let scale_matrix = Mat4::from_scale(v3::new(scale, scale, 1.0));
-            gpu.render_textured_triangles(&vert_positions, &vert_texcoords, scale_matrix);
+            gpu.render_textured_triangles(
+                &vert_positions,
+                &vert_texcoords,
+                PLACEHOLDER_TEXTURE_ID_TODO,
+                scale_matrix,
+            );
         }
     }
 }
