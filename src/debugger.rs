@@ -74,7 +74,7 @@ impl Debugger {
             };
 
             let mut vert_positions = Vec::with_capacity(mesh.indices.len());
-            let mut vert_colors = Vec::with_capacity(mesh.indices.len());
+            let mut vert_colors = Vec::with_capacity(mesh.indices.len() * 4);
             let mut vert_uvs = Vec::with_capacity(mesh.indices.len());
             for index in mesh.indices {
                 let vert = mesh.vertices[index as usize];
@@ -83,6 +83,20 @@ impl Debugger {
                 vert_colors.extend_from_slice(&rgba);
                 vert_uvs.push(Vec2::new(vert.uv.x, vert.uv.y));
             }
+
+            let vert_colors = {
+                let mut colors_vec4s = Vec::with_capacity(vert_colors.len() / 4);
+                for i in (0..vert_colors.len()).step_by(4) {
+                    let v = Vec4::new(
+                        vert_colors[i] as f32 / 255.0,
+                        vert_colors[i + 1] as f32 / 255.0,
+                        vert_colors[i + 2] as f32 / 255.0,
+                        vert_colors[i + 3] as f32 / 255.0,
+                    );
+                    colors_vec4s.push(v);
+                }
+                colors_vec4s
+            };
 
             let egui_tex_id = match mesh.texture_id {
                 egui::TextureId::Managed(id) => id,
@@ -97,7 +111,7 @@ impl Debugger {
             let scale_matrix = Mat4::from_scale(Vec3::new(scale_x, -scale_y, 1.0));
             gpu.render_triangles(
                 &vert_positions,
-                None, // TODO
+                Some(&vert_colors),
                 Some((gpu_tex_id, &vert_uvs)),
                 scale_matrix,
             );
