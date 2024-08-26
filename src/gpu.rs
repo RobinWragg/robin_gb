@@ -5,7 +5,7 @@ use wgpu;
 use winit::window::Window;
 
 // TODO: I wonder if I can resize the buffers on the fly.
-const VERTEX_BUFFERS_SIZE: u64 = 3000;
+const VERTEX_BUFFERS_SIZE: u64 = 30000;
 
 struct Texture {
     texture: wgpu::Texture,
@@ -26,9 +26,19 @@ pub struct Gpu<'a> {
     matrix_buffer: wgpu::Buffer,
     vertpos_buffer: wgpu::Buffer,
     texcoord_buffer: wgpu::Buffer,
+    width: usize,
+    height: usize,
 }
 
 impl<'a> Gpu<'a> {
+    pub fn width(&self) -> usize {
+        self.width
+    }
+
+    pub fn height(&self) -> usize {
+        self.height
+    }
+
     pub async fn new(window: &Arc<Window>) -> Gpu<'a> {
         let (surface, adapter) = {
             let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
@@ -151,6 +161,8 @@ impl<'a> Gpu<'a> {
         );
 
         let mut gpu = Self {
+            width: window.inner_size().width as usize,
+            height: window.inner_size().height as usize,
             surface,
             surface_texture: None,
             device,

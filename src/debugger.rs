@@ -1,7 +1,7 @@
 use crate::common_types::*;
 use crate::gpu::Gpu;
+use egui;
 use egui::epaint::{image::ImageData, textures::*};
-use egui::{self, FontImage};
 use std::collections::HashMap;
 
 #[derive(Default)]
@@ -14,8 +14,13 @@ impl Debugger {
     pub fn render(&mut self, gpu: &mut Gpu) {
         let raw_input = egui::RawInput::default();
         let full_output = self.ctx.run(raw_input, |ctx| {
-            egui::CentralPanel::default().show(&ctx, |ui| {
+            egui::Window::new("window!").show(&ctx, |ui| {
                 ui.label("Hello world!");
+                let mut wat = false;
+                ui.checkbox(&mut wat, "checkbox");
+                let _ = ui.button("button");
+                let mut slider_value = 30.0;
+                ui.add(egui::Slider::new(&mut slider_value, 0.0..=100.0).text("My value"));
             });
         });
 
@@ -36,6 +41,9 @@ impl Debugger {
             let mut monochrome_pixels = Vec::with_capacity(srgba_pixels.len());
             for pixel in srgba_pixels {
                 monochrome_pixels.push(pixel.r());
+                if pixel.r() != 0 {
+                    println!("{} {} {} {}", pixel.r(), pixel.g(), pixel.b(), pixel.a());
+                }
             }
             gpu.write_texture(gpu_tex_id, &monochrome_pixels);
 
@@ -49,11 +57,11 @@ impl Debugger {
         }
         assert!(full_output.textures_delta.free.is_empty());
 
-        let clipped_primitives = self
+        dbg!(full_output.shapes.len());
+        for prim in self
             .ctx
-            .tessellate(full_output.shapes, full_output.pixels_per_point);
-
-        for prim in clipped_primitives {
+            .tessellate(full_output.shapes, full_output.pixels_per_point)
+        {
             let mesh = match prim.primitive {
                 egui::epaint::Primitive::Mesh(m) => m,
                 _ => panic!(),
@@ -75,8 +83,9 @@ impl Debugger {
             let gpu_tex_id = *self.egui_to_gpu_tex_id.get(&egui_tex_id).unwrap();
             assert!(gpu_tex_id != 0);
 
-            let scale = 0.01; // TODO: Arbitrary.
-            let scale_matrix = Mat4::from_scale(v3::new(scale, -scale, 1.0));
+            let scale_x = 2.0 / gpu.width() as f32; // TODO: Arbitrary.
+            let scale_y = 2.0 / gpu.height() as f32; // TODO: Arbitrary.
+            let scale_matrix = Mat4::from_scale(v3::new(scale_x, -scale_y, 1.0));
             gpu.render_textured_triangles(
                 &vert_positions,
                 &vert_texcoords,
