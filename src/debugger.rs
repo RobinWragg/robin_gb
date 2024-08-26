@@ -38,14 +38,14 @@ impl Debugger {
 
             let gpu_tex_id = gpu.create_texture(font_image.size[0], font_image.size[1], true);
             let srgba_pixels = font_image.srgba_pixels(None);
-            let mut monochrome_pixels = Vec::with_capacity(srgba_pixels.len());
+            let mut pixel_bytes = Vec::with_capacity(srgba_pixels.len() * 4);
             for pixel in srgba_pixels {
-                monochrome_pixels.push(pixel.r());
-                if pixel.r() != 0 {
-                    println!("{} {} {} {}", pixel.r(), pixel.g(), pixel.b(), pixel.a());
-                }
+                pixel_bytes.push(pixel.r());
+                pixel_bytes.push(pixel.g());
+                pixel_bytes.push(pixel.b());
+                pixel_bytes.push(pixel.a());
             }
-            gpu.write_texture(gpu_tex_id, &monochrome_pixels);
+            gpu.write_rgba_texture(gpu_tex_id, &pixel_bytes);
 
             let egui_tex_id = match egui_tex_id {
                 egui::TextureId::Managed(id) => *id,

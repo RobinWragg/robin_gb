@@ -122,8 +122,8 @@ impl ApplicationHandler for App<'_> {
                 let mut screen: [u8; 160 * 144] = [0; 160 * 144];
                 for i in 0..self.game_boys.len() {
                     self.game_boys[i].emulate_next_frame(&mut screen);
-                    gpu.write_texture(self.tex_nearest, &screen);
-                    gpu.write_texture(self.tex_linear, &screen);
+                    gpu.write_monochrome_texture(self.tex_nearest, &screen);
+                    gpu.write_monochrome_texture(self.tex_linear, &screen);
                     gpu.render_textured_quad(self.tex_nearest, self.tile_transforms[i]);
                     gpu.render_textured_quad(self.tex_linear, self.tile_transforms[i + 1]);
                     break;

@@ -191,7 +191,7 @@ impl<'a> Gpu<'a> {
         // colors get multiplied with white (255u8), allowing the texturing pipeline to
         // handle non-textured meshes.
         let white_texture = gpu.create_texture(1, 1, false);
-        gpu.write_texture(white_texture, &[255u8; 1]);
+        gpu.write_monochrome_texture(white_texture, &[255u8; 1]);
         assert_eq!(white_texture, WHITE_TEXTURE_ID);
 
         gpu
@@ -285,7 +285,7 @@ impl<'a> Gpu<'a> {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::R8Unorm, // One byte per pixel
+            format: wgpu::TextureFormat::Rgba8Unorm,
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             label: Some("default gb texture"),
             view_formats: &[],
@@ -341,10 +341,32 @@ impl<'a> Gpu<'a> {
         surface_texture.unwrap().present();
     }
 
-    // TODO: Only greyscale game boy textures for now.
-    pub fn write_texture(&self, texture_id: usize, pixels: &[u8]) {
+    pub fn write_monochrome_texture(&self, texture_id: usize, pixels: &[u8]) {
         let texture = &self.textures[texture_id];
-        assert!(pixels.len() == (texture.size.width * texture.size.height) as usize);
+        assert_eq!(
+            pixels.len(),
+            (texture.size.width * texture.size.height) as usize,
+            "expected 8bit single-channel pixel data"
+        );
+
+        let mut rgba_pixel_bytes = Vec::with_capacity(pixels.len() * 4);
+        for pixel in pixels {
+            rgba_pixel_bytes.push(*pixel);
+            rgba_pixel_bytes.push(*pixel);
+            rgba_pixel_bytes.push(*pixel);
+            rgba_pixel_bytes.push(0xff);
+        }
+
+        self.write_rgba_texture(texture_id, &rgba_pixel_bytes);
+    }
+
+    pub fn write_rgba_texture(&self, texture_id: usize, pixel_bytes: &[u8]) {
+        let texture = &self.textures[texture_id];
+        assert_eq!(
+            pixel_bytes.len(),
+            (texture.size.width * texture.size.height * 4) as usize,
+            "expected 8bit RGBA pixel data"
+        );
         self.queue.write_texture(
             wgpu::ImageCopyTexture {
                 texture: &texture.texture,
@@ -352,11 +374,11 @@ impl<'a> Gpu<'a> {
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
             },
-            pixels,
+            pixel_bytes,
             wgpu::ImageDataLayout {
                 offset: 0,
-                bytes_per_row: Some(texture.size.width), // TODO: Will need to be changed for RGBA!
-                rows_per_image: Some(texture.size.height), // TODO: Will need to be changed for RGBA!
+                bytes_per_row: Some(texture.size.width * 4),
+                rows_per_image: Some(texture.size.height),
             },
             texture.size,
         );

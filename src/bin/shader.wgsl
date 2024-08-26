@@ -35,6 +35,5 @@ var s_0: sampler;
 fn fs_main(in: VertToFrag) -> @location(0) vec4<f32> {
     let tex_color = textureSample(t_0, s_0, in.uv);
     let vert_color = in.color;
-    // return tex_color;
-    // return vert_color;
+    return tex_color * vert_color;
 }
