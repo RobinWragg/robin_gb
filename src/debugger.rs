@@ -95,7 +95,12 @@ impl Debugger {
             let scale_x = 2.0 / gpu.width() as f32; // TODO: Arbitrary.
             let scale_y = 2.0 / gpu.height() as f32; // TODO: Arbitrary.
             let scale_matrix = Mat4::from_scale(Vec3::new(scale_x, -scale_y, 1.0));
-            gpu.render_triangles(&vert_positions, Some((gpu_tex_id, &vert_uvs)), scale_matrix);
+            gpu.render_triangles(
+                &vert_positions,
+                None, // TODO
+                Some((gpu_tex_id, &vert_uvs)),
+                scale_matrix,
+            );
         }
     }
 }

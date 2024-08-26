@@ -25,6 +25,7 @@ pub struct Gpu<'a> {
     textures: Vec<Texture>,
     matrix_buffer: wgpu::Buffer,
     vertpos_buffer: wgpu::Buffer,
+    vertcolor_buffer: wgpu::Buffer,
     uv_buffer: wgpu::Buffer,
     width: usize,
     height: usize,
@@ -88,6 +89,15 @@ impl<'a> Gpu<'a> {
         };
 
         let vertpos_buffer = {
+            let desc = wgpu::BufferDescriptor {
+                label: None,
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                size: VERTEX_BUFFERS_SIZE,
+                mapped_at_creation: false,
+            };
+            device.create_buffer(&desc)
+        };
+        let vertcolor_buffer = {
             let desc = wgpu::BufferDescriptor {
                 label: None,
                 usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
@@ -172,6 +182,7 @@ impl<'a> Gpu<'a> {
             texture_bindgroup_layout,
             matrix_buffer,
             vertpos_buffer,
+            vertcolor_buffer,
             uv_buffer,
             textures: vec![],
         };
@@ -197,7 +208,7 @@ impl<'a> Gpu<'a> {
             bind_group_layouts,
             push_constant_ranges: &[],
         });
-        let vert_pos_layout = wgpu::VertexBufferLayout {
+        let vertpos_layout = wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<[f32; 2]>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,
             attributes: &[wgpu::VertexAttribute {
@@ -206,12 +217,21 @@ impl<'a> Gpu<'a> {
                 format: wgpu::VertexFormat::Float32x2,
             }],
         };
+        let vertcolor_layout = wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<[f32; 4]>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &[wgpu::VertexAttribute {
+                offset: 0,
+                shader_location: 1,
+                format: wgpu::VertexFormat::Float32x4,
+            }],
+        };
         let uv_layout = wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<[f32; 2]>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,
             attributes: &[wgpu::VertexAttribute {
                 offset: 0,
-                shader_location: 1,
+                shader_location: 2,
                 format: wgpu::VertexFormat::Float32x2,
             }],
         };
@@ -221,7 +241,7 @@ impl<'a> Gpu<'a> {
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: "vs_main",
-                buffers: &[vert_pos_layout, uv_layout],
+                buffers: &[vertpos_layout, vertcolor_layout, uv_layout],
                 compilation_options: Default::default(),
             },
             fragment: Some(wgpu::FragmentState {
@@ -352,20 +372,44 @@ impl<'a> Gpu<'a> {
         self.queue.write_buffer(buffer, 0, bytes);
     }
 
+    fn write_vec4_slice_to_buffer(&self, buffer: &wgpu::Buffer, slice: &[Vec4]) {
+        let mut floats: Vec<f32> = Vec::with_capacity(slice.len() * 2); // Assume Vec2 or bigger.
+        for i in 0..slice.len() {
+            let a = slice[i].to_array();
+            floats.extend_from_slice(&a);
+        }
+        let bytes = bytemuck::cast_slice(&floats);
+        self.queue.write_buffer(buffer, 0, bytes);
+    }
+
     pub fn render_triangles(
         &self,
-        vertices: &[Vec2],
+        verts: &[Vec2],
+        colors: Option<&[Vec4]>,
         texture_id_and_uvs: Option<(usize, &[Vec2])>,
         matrix: Mat4,
     ) {
-        self.write_vec2_slice_to_buffer(&self.vertpos_buffer, vertices);
+        self.write_vec2_slice_to_buffer(&self.vertpos_buffer, verts);
+
+        if let Some(colors) = colors {
+            self.write_vec4_slice_to_buffer(&self.vertcolor_buffer, colors);
+        } else {
+            // Disable vertex colors by just multiplying the texture with white.
+            let white = Vec4 {
+                x: 1.0,
+                y: 1.0,
+                z: 1.0,
+                w: 1.0,
+            };
+            self.write_vec4_slice_to_buffer(&self.vertcolor_buffer, &vec![white; verts.len()]);
+        }
 
         let texture_id = match texture_id_and_uvs {
             Some((id, uvs)) => {
                 self.write_vec2_slice_to_buffer(&self.uv_buffer, uvs);
                 id
             }
-            // Disable texturing just multiplying vertex colors with white.
+            // Disable texturing by just multiplying vertex colors with white.
             None => WHITE_TEXTURE_ID,
         };
 
@@ -404,7 +448,8 @@ impl<'a> Gpu<'a> {
 
             render_pass.set_pipeline(&self.pipeline);
             render_pass.set_vertex_buffer(0, self.vertpos_buffer.slice(..));
-            render_pass.set_vertex_buffer(1, self.uv_buffer.slice(..));
+            render_pass.set_vertex_buffer(1, self.vertcolor_buffer.slice(..));
+            render_pass.set_vertex_buffer(2, self.uv_buffer.slice(..));
             render_pass.set_bind_group(0, &self.uniforms_bindgroup, &[]);
 
             // This is kind of jank tbh; I'm setting a texture even when I'm not using it.
@@ -412,7 +457,7 @@ impl<'a> Gpu<'a> {
             let texture_bindgroup = &self.textures[texture_id].bindgroup;
             render_pass.set_bind_group(1, texture_bindgroup, &[]);
 
-            render_pass.draw(0..vertices.len() as u32, 0..1);
+            render_pass.draw(0..verts.len() as u32, 0..1);
         } // We're dropping render_pass here to unborrow the encoder.
 
         self.queue.submit(std::iter::once(encoder.finish()));
@@ -435,6 +480,6 @@ impl<'a> Gpu<'a> {
             Vec2::new(1.0, 1.0),
             Vec2::new(1.0, 0.0),
         ];
-        self.render_triangles(&positions, Some((texture_id, &uvs)), matrix);
+        self.render_triangles(&positions, None, Some((texture_id, &uvs)), matrix);
     }
 }

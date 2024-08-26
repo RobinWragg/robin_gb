@@ -26,8 +26,8 @@ const WINDOW_HEIGHT: u32 = 144 * GAME_BOYS_PER_ROW;
 struct App<'a> {
     window: Option<Arc<Window>>,
     gpu: Option<Gpu<'a>>,
-    texture_nearest: usize,
-    texture_linear: usize,
+    tex_nearest: usize,
+    tex_linear: usize,
     game_boys: Vec<GameBoy>,
     tile_transforms: Vec<Mat4>,
     debugger: Debugger,
@@ -50,8 +50,8 @@ impl ApplicationHandler for App<'_> {
 
         // Set up wgpu rendering and the transforms for the game boy screens.
         self.gpu = Some(pollster::block_on(Gpu::new(&window))); // TODO: Figure out how to move this complexity into gpu.rs.
-        self.texture_nearest = self.gpu.as_mut().unwrap().create_texture(160, 144, false);
-        self.texture_linear = self.gpu.as_mut().unwrap().create_texture(160, 144, true);
+        self.tex_nearest = self.gpu.as_mut().unwrap().create_texture(160, 144, false);
+        self.tex_linear = self.gpu.as_mut().unwrap().create_texture(160, 144, true);
         self.window = Some(window.clone());
 
         // rwtodo: make this a command line argument.
@@ -122,10 +122,10 @@ impl ApplicationHandler for App<'_> {
                 let mut screen: [u8; 160 * 144] = [0; 160 * 144];
                 for i in 0..self.game_boys.len() {
                     self.game_boys[i].emulate_next_frame(&mut screen);
-                    gpu.write_texture(self.texture_nearest, &screen);
-                    gpu.write_texture(self.texture_linear, &screen);
-                    gpu.render_textured_quad(self.texture_nearest, self.tile_transforms[i]);
-                    gpu.render_textured_quad(self.texture_linear, self.tile_transforms[i + 1]);
+                    gpu.write_texture(self.tex_nearest, &screen);
+                    gpu.write_texture(self.tex_linear, &screen);
+                    gpu.render_textured_quad(self.tex_nearest, self.tile_transforms[i]);
+                    gpu.render_textured_quad(self.tex_linear, self.tile_transforms[i + 1]);
                     break;
                 }
 
@@ -134,7 +134,26 @@ impl ApplicationHandler for App<'_> {
                     Vec2::new(0.9, 0.1),
                     Vec2::new(0.1, 0.9),
                 ];
-                gpu.render_triangles(&positions, None, Mat4::IDENTITY);
+
+                let colors = vec![
+                    Vec4::new(0.0, 1.0, 0.0, 1.0),
+                    Vec4::new(1.0, 0.0, 0.0, 1.0),
+                    Vec4::new(0.0, 0.0, 1.0, 0.0),
+                ];
+
+                let mut m = self.tile_transforms[2];
+                gpu.render_triangles(&positions, None, Some((self.tex_nearest, &positions)), m);
+                m.x_axis.w += 0.2;
+                gpu.render_triangles(&positions, Some(&colors), None, m);
+                m.x_axis.w += 0.2;
+                gpu.render_triangles(&positions, None, None, m);
+                m.x_axis.w += 0.2;
+                gpu.render_triangles(
+                    &positions,
+                    Some(&colors),
+                    Some((self.tex_nearest, &positions)),
+                    m,
+                );
 
                 self.debugger.render(gpu);
                 gpu.finish_frame();
