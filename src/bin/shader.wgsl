@@ -27,13 +27,13 @@ fn vs_main(@builtin(vertex_index) vert_index: u32, vert: VertInput) -> VertToFra
 // Fragment shader
 
 @group(1) @binding(0)
-var t_0: texture_2d<f32>;
+var texture_view: texture_2d<f32>;
 @group(1) @binding(1)
-var s_0: sampler;
+var texture_sampler: sampler;
 
 @fragment
 fn fs_main(in: VertToFrag) -> @location(0) vec4<f32> {
-    let tex_color = textureSample(t_0, s_0, in.uv);
+    let tex_color = textureSample(texture_view, texture_sampler, in.uv);
     let vert_color = in.color;
     return tex_color * vert_color;
 }
