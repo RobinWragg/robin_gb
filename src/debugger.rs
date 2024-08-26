@@ -36,7 +36,7 @@ impl Debugger {
                 ImageData::Font(f) => f,
             };
 
-            let gpu_tex_id = gpu.create_texture(font_image.size[0], font_image.size[1]);
+            let gpu_tex_id = gpu.create_texture(font_image.size[0], font_image.size[1], true);
             let srgba_pixels = font_image.srgba_pixels(None);
             let mut monochrome_pixels = Vec::with_capacity(srgba_pixels.len());
             for pixel in srgba_pixels {
@@ -58,21 +58,30 @@ impl Debugger {
         assert!(full_output.textures_delta.free.is_empty());
 
         dbg!(full_output.shapes.len());
+        let only = 1;
+        let mut counter = -1;
         for prim in self
             .ctx
             .tessellate(full_output.shapes, full_output.pixels_per_point)
         {
+            counter += 1;
+            if only != counter {
+                continue;
+            }
             let mesh = match prim.primitive {
                 egui::epaint::Primitive::Mesh(m) => m,
                 _ => panic!(),
             };
 
             let mut vert_positions = Vec::with_capacity(mesh.indices.len());
-            let mut vert_texcoords = Vec::with_capacity(mesh.indices.len());
+            let mut vert_colors = Vec::with_capacity(mesh.indices.len());
+            let mut vert_uvs = Vec::with_capacity(mesh.indices.len());
             for index in mesh.indices {
                 let vert = mesh.vertices[index as usize];
                 vert_positions.push(Vec2::new(vert.pos.x, vert.pos.y));
-                vert_texcoords.push(Vec2::new(vert.uv.x, vert.uv.y));
+                let rgba = vert.color.to_array(); // TODO: this is premultiplied
+                vert_colors.extend_from_slice(&rgba);
+                vert_uvs.push(Vec2::new(vert.uv.x, vert.uv.y));
             }
 
             let egui_tex_id = match mesh.texture_id {
@@ -86,12 +95,7 @@ impl Debugger {
             let scale_x = 2.0 / gpu.width() as f32; // TODO: Arbitrary.
             let scale_y = 2.0 / gpu.height() as f32; // TODO: Arbitrary.
             let scale_matrix = Mat4::from_scale(Vec3::new(scale_x, -scale_y, 1.0));
-            gpu.render_textured_triangles(
-                &vert_positions,
-                &vert_texcoords,
-                gpu_tex_id,
-                scale_matrix,
-            );
+            gpu.render_triangles(&vert_positions, Some((gpu_tex_id, &vert_uvs)), scale_matrix);
         }
     }
 }

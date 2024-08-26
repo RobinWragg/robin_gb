@@ -17,8 +17,8 @@ use winit::{
 
 // rwtodo: Put this and winit/wgpu behind a feature, as I don't want users of the robin_gb library to have to download them.
 
-const GAME_BOYS_PER_COLUMN: u32 = 4;
-const GAME_BOYS_PER_ROW: u32 = 4;
+const GAME_BOYS_PER_COLUMN: u32 = 3;
+const GAME_BOYS_PER_ROW: u32 = 3;
 const WINDOW_WIDTH: u32 = 160 * GAME_BOYS_PER_COLUMN;
 const WINDOW_HEIGHT: u32 = 144 * GAME_BOYS_PER_ROW;
 
@@ -26,7 +26,8 @@ const WINDOW_HEIGHT: u32 = 144 * GAME_BOYS_PER_ROW;
 struct App<'a> {
     window: Option<Arc<Window>>,
     gpu: Option<Gpu<'a>>,
-    rewritable_texture: usize,
+    texture_nearest: usize,
+    texture_linear: usize,
     game_boys: Vec<GameBoy>,
     tile_transforms: Vec<Mat4>,
     debugger: Debugger,
@@ -49,7 +50,8 @@ impl ApplicationHandler for App<'_> {
 
         // Set up wgpu rendering and the transforms for the game boy screens.
         self.gpu = Some(pollster::block_on(Gpu::new(&window))); // TODO: Figure out how to move this complexity into gpu.rs.
-        self.rewritable_texture = self.gpu.as_mut().unwrap().create_texture(160, 144);
+        self.texture_nearest = self.gpu.as_mut().unwrap().create_texture(160, 144, false);
+        self.texture_linear = self.gpu.as_mut().unwrap().create_texture(160, 144, true);
         self.window = Some(window.clone());
 
         // rwtodo: make this a command line argument.
@@ -120,9 +122,19 @@ impl ApplicationHandler for App<'_> {
                 let mut screen: [u8; 160 * 144] = [0; 160 * 144];
                 for i in 0..self.game_boys.len() {
                     self.game_boys[i].emulate_next_frame(&mut screen);
-                    gpu.write_texture(self.rewritable_texture, &screen);
-                    gpu.render_textured_quad(self.rewritable_texture, self.tile_transforms[i]);
+                    gpu.write_texture(self.texture_nearest, &screen);
+                    gpu.write_texture(self.texture_linear, &screen);
+                    gpu.render_textured_quad(self.texture_nearest, self.tile_transforms[i]);
+                    gpu.render_textured_quad(self.texture_linear, self.tile_transforms[i + 1]);
+                    break;
                 }
+
+                let positions = vec![
+                    Vec2::new(0.1, 0.1),
+                    Vec2::new(0.9, 0.1),
+                    Vec2::new(0.1, 0.9),
+                ];
+                gpu.render_triangles(&positions, None, Mat4::IDENTITY);
 
                 self.debugger.render(gpu);
                 gpu.finish_frame();

@@ -6,6 +6,7 @@ use winit::window::Window;
 
 // TODO: I wonder if I can resize the buffers on the fly.
 const VERTEX_BUFFERS_SIZE: u64 = 30000;
+const WHITE_TEXTURE_ID: usize = 0;
 
 struct Texture {
     texture: wgpu::Texture,
@@ -22,10 +23,9 @@ pub struct Gpu<'a> {
     uniforms_bindgroup: wgpu::BindGroup,
     texture_bindgroup_layout: wgpu::BindGroupLayout,
     textures: Vec<Texture>,
-    active_texture_id: usize,
     matrix_buffer: wgpu::Buffer,
     vertpos_buffer: wgpu::Buffer,
-    texcoord_buffer: wgpu::Buffer,
+    uv_buffer: wgpu::Buffer,
     width: usize,
     height: usize,
 }
@@ -96,7 +96,7 @@ impl<'a> Gpu<'a> {
             };
             device.create_buffer(&desc)
         };
-        let texcoord_buffer = {
+        let uv_buffer = {
             let desc = wgpu::BufferDescriptor {
                 label: None,
                 usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
@@ -172,17 +172,16 @@ impl<'a> Gpu<'a> {
             texture_bindgroup_layout,
             matrix_buffer,
             vertpos_buffer,
-            texcoord_buffer,
+            uv_buffer,
             textures: vec![],
-            active_texture_id: 0,
         };
 
-        // A bit of a hack: I'm creating a default texture so we always have one to give to the
-        // renderpass, otherwise we'd have to create a separate pipeline and shader that don't
-        // refer to textures. We don't need that extra complexity. (yet?)
-        // TODO: I could treat texture id 0 as 'no texture' and set a uniform to disable sampling.
-        let default_texture = gpu.create_texture(16, 16);
-        assert_eq!(default_texture, 0);
+        // The white texture is used when the user doesn't want texturing; the vertex
+        // colors get multiplied with white (255u8), allowing the texturing pipeline to
+        // handle non-textured meshes.
+        let white_texture = gpu.create_texture(1, 1, false);
+        gpu.write_texture(white_texture, &[255u8; 1]);
+        assert_eq!(white_texture, WHITE_TEXTURE_ID);
 
         gpu
     }
@@ -207,7 +206,7 @@ impl<'a> Gpu<'a> {
                 format: wgpu::VertexFormat::Float32x2,
             }],
         };
-        let texcoord_layout = wgpu::VertexBufferLayout {
+        let uv_layout = wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<[f32; 2]>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,
             attributes: &[wgpu::VertexAttribute {
@@ -222,7 +221,7 @@ impl<'a> Gpu<'a> {
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: "vs_main",
-                buffers: &[vert_pos_layout, texcoord_layout],
+                buffers: &[vert_pos_layout, uv_layout],
                 compilation_options: Default::default(),
             },
             fragment: Some(wgpu::FragmentState {
@@ -230,7 +229,7 @@ impl<'a> Gpu<'a> {
                 entry_point: "fs_main",
                 targets: &[Some(wgpu::ColorTargetState {
                     format: config.format,
-                    blend: Some(wgpu::BlendState::REPLACE),
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING), // TODO: not premultiplied
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
                 compilation_options: Default::default(),
@@ -255,7 +254,7 @@ impl<'a> Gpu<'a> {
         })
     }
 
-    pub fn create_texture(&mut self, width: usize, height: usize) -> usize {
+    pub fn create_texture(&mut self, width: usize, height: usize, linear_filtering: bool) -> usize {
         let size = wgpu::Extent3d {
             width: width as u32,
             height: height as u32,
@@ -271,6 +270,11 @@ impl<'a> Gpu<'a> {
             label: Some("default gb texture"),
             view_formats: &[],
         });
+        let filter = if linear_filtering {
+            wgpu::FilterMode::Linear
+        } else {
+            wgpu::FilterMode::Nearest
+        };
         let bindgroup = {
             let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
             let sampler = self.device.create_sampler(&wgpu::SamplerDescriptor {
@@ -278,8 +282,8 @@ impl<'a> Gpu<'a> {
                 address_mode_u: wgpu::AddressMode::ClampToEdge,
                 address_mode_v: wgpu::AddressMode::ClampToEdge,
                 address_mode_w: wgpu::AddressMode::ClampToEdge,
-                mag_filter: wgpu::FilterMode::Nearest,
-                min_filter: wgpu::FilterMode::Nearest,
+                mag_filter: filter,
+                min_filter: wgpu::FilterMode::Linear,
                 mipmap_filter: wgpu::FilterMode::Nearest,
                 ..Default::default()
             });
@@ -348,20 +352,22 @@ impl<'a> Gpu<'a> {
         self.queue.write_buffer(buffer, 0, bytes);
     }
 
-    pub fn render_textured_triangles(
-        &mut self,
+    pub fn render_triangles(
+        &self,
         vertices: &[Vec2],
-        tex_coords: &[Vec2],
-        texture_id: usize,
+        texture_id_and_uvs: Option<(usize, &[Vec2])>,
         matrix: Mat4,
     ) {
-        self.write_vec2_slice_to_buffer(&self.texcoord_buffer, tex_coords);
-        self.active_texture_id = texture_id;
-        self.render_triangles(vertices, matrix);
-    }
-
-    pub fn render_triangles(&self, vertices: &[Vec2], matrix: Mat4) {
         self.write_vec2_slice_to_buffer(&self.vertpos_buffer, vertices);
+
+        let texture_id = match texture_id_and_uvs {
+            Some((id, uvs)) => {
+                self.write_vec2_slice_to_buffer(&self.uv_buffer, uvs);
+                id
+            }
+            // Disable texturing just multiplying vertex colors with white.
+            None => WHITE_TEXTURE_ID,
+        };
 
         // Write the matrix to its wgpu buffer
         {
@@ -398,12 +404,12 @@ impl<'a> Gpu<'a> {
 
             render_pass.set_pipeline(&self.pipeline);
             render_pass.set_vertex_buffer(0, self.vertpos_buffer.slice(..));
-            render_pass.set_vertex_buffer(1, self.texcoord_buffer.slice(..));
+            render_pass.set_vertex_buffer(1, self.uv_buffer.slice(..));
             render_pass.set_bind_group(0, &self.uniforms_bindgroup, &[]);
 
             // This is kind of jank tbh; I'm setting a texture even when I'm not using it.
             // The alternative is to create more than one pipeline and shader.
-            let texture_bindgroup = &self.textures[self.active_texture_id].bindgroup;
+            let texture_bindgroup = &self.textures[texture_id].bindgroup;
             render_pass.set_bind_group(1, texture_bindgroup, &[]);
 
             render_pass.draw(0..vertices.len() as u32, 0..1);
@@ -414,14 +420,14 @@ impl<'a> Gpu<'a> {
 
     pub fn render_textured_quad(&mut self, texture_id: usize, matrix: Mat4) {
         let positions = vec![
-            Vec2::new(0.1, 0.1),
-            Vec2::new(0.9, 0.1),
-            Vec2::new(0.1, 0.9),
-            Vec2::new(0.1, 0.9),
-            Vec2::new(0.9, 0.1),
-            Vec2::new(0.9, 0.9),
+            Vec2::new(0.0, 0.0),
+            Vec2::new(1.0, 0.0),
+            Vec2::new(0.0, 1.0),
+            Vec2::new(0.0, 1.0),
+            Vec2::new(1.0, 0.0),
+            Vec2::new(1.0, 1.0),
         ];
-        let texcoords = vec![
+        let uvs = vec![
             Vec2::new(0.0, 1.0),
             Vec2::new(1.0, 1.0),
             Vec2::new(0.0, 0.0),
@@ -429,6 +435,6 @@ impl<'a> Gpu<'a> {
             Vec2::new(1.0, 1.0),
             Vec2::new(1.0, 0.0),
         ];
-        self.render_textured_triangles(&positions, &texcoords, texture_id, matrix);
+        self.render_triangles(&positions, Some((texture_id, &uvs)), matrix);
     }
 }
