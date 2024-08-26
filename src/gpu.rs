@@ -1,5 +1,6 @@
 use crate::common_types::*;
 use bytemuck;
+use pollster;
 use std::sync::Arc;
 use wgpu;
 use winit::window::Window;
@@ -40,36 +41,33 @@ impl<'a> Gpu<'a> {
         self.height
     }
 
-    pub async fn new(window: &Arc<Window>) -> Gpu<'a> {
+    pub fn new(window: &Arc<Window>) -> Gpu<'a> {
         let (surface, adapter) = {
             let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
                 backends: wgpu::Backends::all(),
                 ..Default::default()
             });
             let surface = instance.create_surface(window.clone()).unwrap();
-            let adapter = instance
-                .request_adapter(&wgpu::RequestAdapterOptions {
+            let adapter =
+                pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
                     power_preference: wgpu::PowerPreference::HighPerformance,
                     compatible_surface: Some(&surface),
                     force_fallback_adapter: false,
-                })
-                .await
+                }))
                 .unwrap();
             (surface, adapter)
         };
 
-        let (device, queue) = adapter
-            .request_device(
-                &wgpu::DeviceDescriptor {
-                    required_features: wgpu::Features::empty(),
-                    required_limits: wgpu::Limits::downlevel_webgl2_defaults(),
-                    label: None,
-                    memory_hints: wgpu::MemoryHints::Performance,
-                },
-                None,
-            )
-            .await
-            .unwrap();
+        let (device, queue) = pollster::block_on(adapter.request_device(
+            &wgpu::DeviceDescriptor {
+                required_features: wgpu::Features::empty(),
+                required_limits: wgpu::Limits::downlevel_webgl2_defaults(),
+                label: None,
+                memory_hints: wgpu::MemoryHints::Performance,
+            },
+            None,
+        ))
+        .unwrap();
 
         let size = window.inner_size(); // Size in physical pixels
         let config = surface
@@ -450,7 +448,7 @@ impl<'a> Gpu<'a> {
             let view = self
                 .surface_texture
                 .as_ref()
-                .unwrap()
+                .expect("did you forget to call gpu.begin_frame()?")
                 .texture
                 .create_view(&wgpu::TextureViewDescriptor::default());
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
