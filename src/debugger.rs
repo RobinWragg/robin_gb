@@ -71,8 +71,8 @@ impl Debugger {
             let mut vert_texcoords = Vec::with_capacity(mesh.indices.len());
             for index in mesh.indices {
                 let vert = mesh.vertices[index as usize];
-                vert_positions.push(v2::new(vert.pos.x, vert.pos.y));
-                vert_texcoords.push(v2::new(vert.uv.x, vert.uv.y));
+                vert_positions.push(Vec2::new(vert.pos.x, vert.pos.y));
+                vert_texcoords.push(Vec2::new(vert.uv.x, vert.uv.y));
             }
 
             let egui_tex_id = match mesh.texture_id {
@@ -85,7 +85,7 @@ impl Debugger {
 
             let scale_x = 2.0 / gpu.width() as f32; // TODO: Arbitrary.
             let scale_y = 2.0 / gpu.height() as f32; // TODO: Arbitrary.
-            let scale_matrix = Mat4::from_scale(v3::new(scale_x, -scale_y, 1.0));
+            let scale_matrix = Mat4::from_scale(Vec3::new(scale_x, -scale_y, 1.0));
             gpu.render_textured_triangles(
                 &vert_positions,
                 &vert_texcoords,

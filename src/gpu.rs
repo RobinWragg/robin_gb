@@ -338,8 +338,8 @@ impl<'a> Gpu<'a> {
         );
     }
 
-    fn write_v2_slice_to_buffer(&self, buffer: &wgpu::Buffer, slice: &[v2]) {
-        let mut floats: Vec<f32> = Vec::with_capacity(slice.len() * 2); // Assume v2 or bigger.
+    fn write_vec2_slice_to_buffer(&self, buffer: &wgpu::Buffer, slice: &[Vec2]) {
+        let mut floats: Vec<f32> = Vec::with_capacity(slice.len() * 2); // Assume Vec2 or bigger.
         for i in 0..slice.len() {
             let a = slice[i].to_array();
             floats.extend_from_slice(&a);
@@ -350,18 +350,18 @@ impl<'a> Gpu<'a> {
 
     pub fn render_textured_triangles(
         &mut self,
-        vertices: &[v2],
-        tex_coords: &[v2],
+        vertices: &[Vec2],
+        tex_coords: &[Vec2],
         texture_id: usize,
         matrix: Mat4,
     ) {
-        self.write_v2_slice_to_buffer(&self.texcoord_buffer, tex_coords);
+        self.write_vec2_slice_to_buffer(&self.texcoord_buffer, tex_coords);
         self.active_texture_id = texture_id;
         self.render_triangles(vertices, matrix);
     }
 
-    pub fn render_triangles(&self, vertices: &[v2], matrix: Mat4) {
-        self.write_v2_slice_to_buffer(&self.vertpos_buffer, vertices);
+    pub fn render_triangles(&self, vertices: &[Vec2], matrix: Mat4) {
+        self.write_vec2_slice_to_buffer(&self.vertpos_buffer, vertices);
 
         // Write the matrix to its wgpu buffer
         {
@@ -414,20 +414,20 @@ impl<'a> Gpu<'a> {
 
     pub fn render_textured_quad(&mut self, texture_id: usize, matrix: Mat4) {
         let positions = vec![
-            v2::new(0.1, 0.1),
-            v2::new(0.9, 0.1),
-            v2::new(0.1, 0.9),
-            v2::new(0.1, 0.9),
-            v2::new(0.9, 0.1),
-            v2::new(0.9, 0.9),
+            Vec2::new(0.1, 0.1),
+            Vec2::new(0.9, 0.1),
+            Vec2::new(0.1, 0.9),
+            Vec2::new(0.1, 0.9),
+            Vec2::new(0.9, 0.1),
+            Vec2::new(0.9, 0.9),
         ];
         let texcoords = vec![
-            v2::new(0.0, 1.0),
-            v2::new(1.0, 1.0),
-            v2::new(0.0, 0.0),
-            v2::new(0.0, 0.0),
-            v2::new(1.0, 1.0),
-            v2::new(1.0, 0.0),
+            Vec2::new(0.0, 1.0),
+            Vec2::new(1.0, 1.0),
+            Vec2::new(0.0, 0.0),
+            Vec2::new(0.0, 0.0),
+            Vec2::new(1.0, 1.0),
+            Vec2::new(1.0, 0.0),
         ];
         self.render_textured_triangles(&positions, &texcoords, texture_id, matrix);
     }
