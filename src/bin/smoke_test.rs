@@ -141,20 +141,21 @@ impl ApplicationHandler for App<'_> {
                     Vec4::new(0.0, 0.0, 1.0, 0.0),
                 ];
 
-                let mut m = self.tile_transforms[2];
-                gpu.render_triangles(&positions, None, Some((self.tex_nearest, &positions)), m);
-                m.x_axis.w += 0.2;
-                gpu.render_triangles(&positions, Some(&colors), None, m);
-                m.x_axis.w += 0.2;
-                gpu.render_triangles(&positions, None, None, m);
-                m.x_axis.w += 0.2;
-                gpu.render_triangles(
-                    &positions,
-                    Some(&colors),
-                    Some((self.tex_nearest, &positions)),
-                    m,
-                );
+                // let mut m = self.tile_transforms[2];
+                // gpu.render_triangles(&positions, None, Some((self.tex_nearest, &positions)), m);
+                // m.x_axis.w += 0.2;
+                // gpu.render_triangles(&positions, Some(&colors), None, m);
+                // m.x_axis.w += 0.2;
+                // gpu.render_triangles(&positions, None, None, m);
+                // m.x_axis.w += 0.2;
+                // gpu.render_triangles(
+                //     &positions,
+                //     Some(&colors),
+                //     Some((self.tex_nearest, &positions)),
+                //     m,
+                // );
 
+                self.debugger.render_test(gpu);
                 self.debugger.render(gpu);
                 gpu.finish_frame();
             }
